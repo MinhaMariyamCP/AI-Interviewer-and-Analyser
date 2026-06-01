@@ -74,7 +74,9 @@ export default function RoleSelectionPage() {
         const analysis = response.data.analysis_result;
         
         if (analysis && analysis.suggested_roles?.length) {
-          setSuggestedRoles(mergeRoles(analysis.suggested_roles));
+          const roles = mergeRoles(analysis.suggested_roles);
+          setSuggestedRoles(roles);
+          if (roles[0]) setSelectedRole(roles[0].role);
         } else {
           setSuggestedRoles([]);
           setError('No confident resume-based matches were found. Please use Custom / Niche Role.');
@@ -84,7 +86,9 @@ export default function RoleSelectionPage() {
         try {
           const response = await api.get(`/api/v1/resumes/${resumeId}`);
           const analysis = response.data.analysis_result;
-          setSuggestedRoles(mergeRoles(analysis?.suggested_roles || []));
+          const roles = mergeRoles(analysis?.suggested_roles || []);
+          setSuggestedRoles(roles);
+          if (roles[0]) setSelectedRole(roles[0].role);
           setError('Using saved role analysis because fresh analysis could not be generated.');
         } catch {
           setSuggestedRoles([]);
@@ -123,6 +127,8 @@ export default function RoleSelectionPage() {
     if (!query) return true;
     return `${item.role} ${item.reasoning}`.toLowerCase().includes(query);
   });
+  const primaryRole = visibleRoles[0];
+  const alternateRoles = visibleRoles.slice(1);
 
   if (isLoading) {
     return (
@@ -145,7 +151,7 @@ export default function RoleSelectionPage() {
             Personalized Recommendations
           </div>
           <h1 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">Select Your Target Role</h1>
-          <p className="text-slate-500 font-medium">Choose from roles backed by your resume evidence or specify a custom one.</p>
+          <p className="text-slate-500 font-medium">Start from the strongest career path detected from your resume, or specify a custom one.</p>
         </div>
         
         {error && (
@@ -166,8 +172,37 @@ export default function RoleSelectionPage() {
           />
         </div>
 
+        {primaryRole && (
+          <div
+            onClick={() => setSelectedRole(primaryRole.role)}
+            className={cn(
+              "relative cursor-pointer p-8 md:p-10 rounded-[2rem] border-2 bg-white shadow-xl shadow-slate-200 mb-8 transition-all",
+              selectedRole === primaryRole.role
+                ? "border-primary-500 ring-4 ring-primary-50"
+                : "border-primary-100 hover:border-primary-300"
+            )}
+          >
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+              <div>
+                <p className="text-[10px] font-black text-primary-600 uppercase tracking-[0.2em] mb-3">Recommended Career Path</p>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-3">{primaryRole.role}</h2>
+                <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-2xl">{primaryRole.reasoning}</p>
+              </div>
+              <div className="shrink-0 text-left md:text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Resume Match</p>
+                <p className="text-4xl font-black text-emerald-500 font-mono">{primaryRole.confidence}%</p>
+              </div>
+            </div>
+            {selectedRole === primaryRole.role && (
+              <div className="absolute -top-3 -right-3 w-10 h-10 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary-200 animate-in zoom-in duration-300">
+                <Check size={20} strokeWidth={3} />
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-          {visibleRoles.map((item, i) => (
+          {alternateRoles.map((item, i) => (
             <div 
               key={i}
               onClick={() => setSelectedRole(item.role)}

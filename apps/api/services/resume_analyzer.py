@@ -96,6 +96,64 @@ class ResumeAnalyzerService:
         if key not in roles or item.confidence > roles[key].confidence:
             roles[key] = item
 
+    def _dominant_domain(self, text: str) -> str:
+        domain_keywords = {
+            "fitness": ["fitness", "trainer", "personal trainer", "workout", "nutrition", "coaching", "gym", "wellness"],
+            "data": ["sql", "excel", "dashboard", "power bi", "tableau", "report", "metrics", "kpi", "analytics", "data analysis"],
+            "software": ["python", "java", "react", "node", "api", "database", "software", "developer", "frontend", "backend", "typescript", "javascript"],
+            "business": ["requirements", "stakeholder", "process", "documentation", "business analysis", "workflow", "operations"],
+            "support": ["customer support", "technical support", "troubleshoot", "ticket", "service desk"],
+            "sales": ["sales", "crm", "lead", "marketing", "campaign", "business development"],
+            "devops": ["docker", "kubernetes", "aws", "azure", "gcp", "cloud", "ci/cd", "devops", "deployment"],
+        }
+
+        scores = {}
+        for domain, keywords in domain_keywords.items():
+            score = 0
+            for keyword in keywords:
+                pattern = r"(?<![a-z0-9])" + re.escape(keyword) + r"(?![a-z0-9])"
+                score += len(re.findall(pattern, text))
+            scores[domain] = score
+
+        best_domain, best_score = max(scores.items(), key=lambda item: item[1])
+        return best_domain if best_score > 0 else "general"
+
+    def _filter_to_dominant_path(self, roles: List[JobPreference], text: str) -> List[JobPreference]:
+        domain = self._dominant_domain(text)
+        role_domains = {
+            "Backend Software Engineer": "software",
+            "Frontend Developer": "software",
+            "Fullstack Developer": "software",
+            "AI/ML Engineer": "software",
+            "DevOps Engineer": "devops",
+            "QA Automation Engineer": "software",
+            "Data Analyst": "data",
+            "Business Analyst": "business",
+            "Support Engineer": "support",
+            "Customer Success Specialist": "support",
+            "Sales Engineer": "sales",
+            "Operations Manager": "business",
+            "Fitness Trainer": "fitness",
+            "Wellness Program Coordinator": "fitness",
+            "Client Wellness Coach": "fitness",
+        }
+
+        if domain == "general":
+            return roles[:3]
+
+        compatible = {
+            "software": {"software", "devops", "data"},
+            "data": {"data", "business"},
+            "business": {"business", "data", "support"},
+            "support": {"support", "business"},
+            "sales": {"sales", "support", "business"},
+            "fitness": {"fitness"},
+            "devops": {"devops", "software"},
+        }
+        allowed = compatible.get(domain, {domain})
+        filtered = [role for role in roles if role_domains.get(role.role) in allowed]
+        return filtered[:4] if filtered else roles[:1]
+
     def _evidence_roles(self, resume_json: dict) -> List[JobPreference]:
         text = self._resume_text(resume_json)
         roles = {}
@@ -107,11 +165,14 @@ class ResumeAnalyzerService:
                     return True
             return False
 
-        if has("python", "fastapi", "django", "flask", "node", "backend", "api", "postgres", "database"):
+        backend_evidence = has("python", "fastapi", "django", "flask", "node", "backend", "postgres", "database", "server")
+        frontend_evidence = has("react", "next", "frontend", "typescript", "javascript", "css", "html", "ui")
+
+        if backend_evidence:
             self._add_role(roles, "Backend Software Engineer", 88, "Matched resume evidence for APIs, backend tools, databases, or server-side engineering.")
-        if has("react", "next", "frontend", "typescript", "javascript", "css", "html", "ui"):
+        if frontend_evidence:
             self._add_role(roles, "Frontend Developer", 86, "Matched resume evidence for frontend technologies or UI implementation.")
-        if has("react", "frontend", "backend", "api", "database") and has("python", "node", "java", "fastapi", "django"):
+        if frontend_evidence and backend_evidence:
             self._add_role(roles, "Fullstack Developer", 84, "Matched resume evidence across both frontend and backend work.")
         if has("machine learning", "tensorflow", "pytorch", "model", "ml", "artificial intelligence", "data science"):
             self._add_role(roles, "AI/ML Engineer", 88, "Matched resume evidence for machine learning, AI models, or data science.")
@@ -133,7 +194,8 @@ class ResumeAnalyzerService:
             self._add_role(roles, "Fitness Trainer", 90, "Matched resume evidence for fitness, coaching, training, nutrition, or client workout guidance.")
             self._add_role(roles, "Wellness Program Coordinator", 82, "Matched resume evidence for client training, wellness guidance, or program coordination.")
 
-        return sorted(roles.values(), key=lambda item: item.confidence, reverse=True)
+        sorted_roles = sorted(roles.values(), key=lambda item: item.confidence, reverse=True)
+        return self._filter_to_dominant_path(sorted_roles, text)
 
     def _merge_with_evidence(self, resume_json: dict, llm_result: ResumeAnalysis) -> ResumeAnalysis:
         evidence_roles = self._evidence_roles(resume_json)
@@ -178,20 +240,21 @@ class ResumeAnalyzerService:
         
         # Ensure we always have a broad interview catalogue for the UI requirement.
         generic_roles = []
-        if any(kw in skills_str for kw in ["python", "java", "react", "software", "developer", "api", "database", "cloud", "docker"]):
+        domain = self._dominant_domain(skills_str)
+        if domain in {"software", "devops"} and any(kw in skills_str for kw in ["python", "java", "react", "software", "developer", "api", "database", "cloud", "docker"]):
             generic_roles.extend([
                 ("Fullstack Developer", "Resume contains software or web-development evidence."),
                 ("Junior Software Engineer", "Resume contains foundational software engineering evidence."),
                 ("QA Automation Engineer", "Resume contains technical skills that can support software testing interviews."),
             ])
-        if any(kw in skills_str for kw in ["analysis", "excel", "report", "dashboard", "business", "stakeholder", "process"]):
+        if domain in {"data", "business"} and any(kw in skills_str for kw in ["analysis", "excel", "report", "dashboard", "business", "stakeholder", "process"]):
             generic_roles.extend([
                 ("Data Analyst", "Resume contains analysis, reporting, dashboard, or metrics evidence."),
                 ("Business Analyst", "Resume contains business, process, stakeholder, or documentation evidence."),
             ])
-        if any(kw in skills_str for kw in ["customer", "support", "service", "client", "communication"]):
+        if domain in {"support", "sales", "business"} and any(kw in skills_str for kw in ["customer", "support", "service", "client", "communication"]):
             generic_roles.append(("Customer Success Specialist", "Resume contains customer, client, service, or communication evidence."))
-        if any(kw in skills_str for kw in ["training", "trainer", "fitness", "coaching", "nutrition"]):
+        if domain == "fitness" and any(kw in skills_str for kw in ["training", "trainer", "fitness", "coaching", "nutrition"]):
             generic_roles.extend([
                 ("Fitness Trainer", "Resume contains training, coaching, fitness, or nutrition evidence."),
                 ("Client Wellness Coach", "Resume contains client guidance or wellness coaching evidence."),
