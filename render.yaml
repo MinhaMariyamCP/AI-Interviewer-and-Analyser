@@ -38,9 +38,9 @@ services:
       - key: PORT
         value: 10000
       - key: NEXT_PUBLIC_API_URL
-        value: https://ai-interview-api.onrender.com
+        value: https://ai-interview-api-tamc.onrender.com
       - key: NEXT_PUBLIC_WS_URL
-        value: wss://ai-interview-api.onrender.com
+        value: wss://ai-interview-api-tamc.onrender.com
 
   - type: keyvalue
     name: ai-interview-redis
