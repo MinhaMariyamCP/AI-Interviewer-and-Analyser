@@ -21,38 +21,34 @@ interface JobPreference {
   role: string;
   confidence: number;
   reasoning: string;
+  source?: 'resume' | 'practice';
 }
 
 const DEFAULT_ROLE_LIBRARY: JobPreference[] = [
-  { role: 'Backend Software Engineer', confidence: 72, reasoning: 'Covers APIs, databases, server-side architecture, and backend problem solving.' },
-  { role: 'Frontend Developer', confidence: 72, reasoning: 'Focuses on UI engineering, React patterns, accessibility, and browser performance.' },
-  { role: 'Fullstack Developer', confidence: 70, reasoning: 'Balances frontend, backend, databases, and end-to-end product delivery.' },
-  { role: 'AI/ML Engineer', confidence: 68, reasoning: 'Targets model workflows, evaluation, data preparation, and applied AI systems.' },
-  { role: 'Data Analyst', confidence: 68, reasoning: 'Useful for SQL, reporting, dashboards, metrics, and insight communication.' },
-  { role: 'Data Scientist', confidence: 68, reasoning: 'Covers statistical thinking, experimentation, modeling, and data storytelling.' },
-  { role: 'DevOps Engineer', confidence: 66, reasoning: 'Prepares for CI/CD, containers, cloud infrastructure, monitoring, and release workflows.' },
-  { role: 'Cloud Engineer', confidence: 66, reasoning: 'Focuses on cloud services, deployment architecture, reliability, and cost awareness.' },
-  { role: 'QA Automation Engineer', confidence: 66, reasoning: 'Covers test design, automation strategy, debugging, and quality ownership.' },
-  { role: 'Cybersecurity Analyst', confidence: 64, reasoning: 'Targets security fundamentals, risk assessment, incident thinking, and secure practices.' },
-  { role: 'Mobile App Developer', confidence: 64, reasoning: 'Prepares for Android, iOS, cross-platform app structure, and mobile UX tradeoffs.' },
-  { role: 'UI/UX Engineer', confidence: 64, reasoning: 'Blends interface implementation, usability judgement, and design-system collaboration.' },
-  { role: 'Technical Product Manager', confidence: 62, reasoning: 'Covers product decisions, tradeoffs, stakeholder communication, and technical fluency.' },
-  { role: 'Business Analyst', confidence: 62, reasoning: 'Focuses on requirements, process mapping, metrics, documentation, and solution framing.' },
-  { role: 'Support Engineer', confidence: 62, reasoning: 'Prepares for troubleshooting, customer communication, and technical diagnosis.' },
-  { role: 'Sales Engineer', confidence: 60, reasoning: 'Fits technical demos, discovery questions, solution mapping, and client-facing explanation.' },
-  { role: 'Operations Manager', confidence: 60, reasoning: 'Targets process ownership, team coordination, execution, and performance improvement.' },
-  { role: 'System Architect', confidence: 60, reasoning: 'Covers high-level design, scalability, reliability, and component tradeoffs.' },
+  { role: 'Backend Software Engineer', confidence: 45, reasoning: 'Additional practice role for APIs, databases, and backend architecture.', source: 'practice' },
+  { role: 'Frontend Developer', confidence: 45, reasoning: 'Additional practice role for UI engineering, React, accessibility, and performance.', source: 'practice' },
+  { role: 'Fullstack Developer', confidence: 44, reasoning: 'Additional practice role covering frontend, backend, and product delivery.', source: 'practice' },
+  { role: 'AI/ML Engineer', confidence: 43, reasoning: 'Additional practice role for model workflows, evaluation, and applied AI systems.', source: 'practice' },
+  { role: 'Data Analyst', confidence: 43, reasoning: 'Additional practice role for SQL, reporting, dashboards, and metrics.', source: 'practice' },
+  { role: 'Business Analyst', confidence: 42, reasoning: 'Additional practice role for requirements, process mapping, and stakeholder communication.', source: 'practice' },
+  { role: 'Support Engineer', confidence: 42, reasoning: 'Additional practice role for troubleshooting and customer-facing technical diagnosis.', source: 'practice' },
+  { role: 'Operations Manager', confidence: 40, reasoning: 'Additional practice role for process ownership, execution, and performance improvement.', source: 'practice' },
 ];
 
 const mergeRoles = (roles: JobPreference[] = []) => {
   const roleMap = new Map<string, JobPreference>();
 
-  [...roles, ...DEFAULT_ROLE_LIBRARY].forEach((item) => {
+  const resumeRoles = roles
+    .filter((item) => item?.role)
+    .map((item) => ({ ...item, role: item.role.trim(), confidence: Math.round(item.confidence), source: 'resume' as const }));
+  const includePracticeRoles = resumeRoles.length < 6;
+
+  [...resumeRoles, ...(includePracticeRoles ? DEFAULT_ROLE_LIBRARY : [])].forEach((item) => {
     if (!item?.role) return;
     const key = item.role.trim().toLowerCase();
     const existing = roleMap.get(key);
 
-    if (!existing || item.confidence > existing.confidence) {
+    if (!existing || existing.source === 'practice') {
       roleMap.set(key, {
         ...item,
         role: item.role.trim(),
@@ -61,7 +57,10 @@ const mergeRoles = (roles: JobPreference[] = []) => {
     }
   });
 
-  return Array.from(roleMap.values()).sort((a, b) => b.confidence - a.confidence);
+  return Array.from(roleMap.values()).sort((a, b) => {
+    if (a.source !== b.source) return a.source === 'resume' ? -1 : 1;
+    return b.confidence - a.confidence;
+  });
 };
 
 export default function RoleSelectionPage() {
@@ -193,7 +192,9 @@ export default function RoleSelectionPage() {
                   <Target size={24} />
                 </div>
                 <div className="flex flex-col items-end">
-                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">Match Score</span>
+                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">
+                     {item.source === 'practice' ? 'Practice' : 'Resume Match'}
+                   </span>
                    <div className={cn(
                      "text-lg font-black font-mono",
                      item.confidence > 85 ? "text-emerald-500" : "text-primary-500"

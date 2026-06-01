@@ -45,7 +45,11 @@ class ResumeAnalyzerService:
         prompt = f"""
         You are an expert technical recruiter. Analyze the following structured resume data.
         Your goal is to:
-        1. Recommend AT LEAST 10 specific job roles that this candidate is qualified for.
+        1. Recommend 6 to 10 specific job roles that this candidate is qualified for.
+        2. Every recommendation MUST be supported by explicit evidence from the resume: skills, projects, experience, education, or domain terms.
+        3. Do NOT add generic software roles unless the resume clearly contains software engineering evidence.
+        4. If the resume is non-technical, recommend domain-appropriate interview roles instead of forcing tech roles.
+        5. In each reasoning field, cite the exact resume evidence that caused the match.
         
         Resume Data:
         {json.dumps(resume_json, indent=2)}
@@ -179,27 +183,37 @@ class ResumeAnalyzerService:
         potential_roles = sorted(unique_roles.values(), key=lambda item: item.confidence, reverse=True)
             
         # Ensure we always have a broad interview catalogue for the UI requirement.
-        generic_roles = [
-            ("Fullstack Developer", "Versatile skill set across the entire web stack."),
-            ("Junior Software Engineer", "Strong foundational knowledge and willingness to learn."),
-            ("Technical Product Manager", "Combination of technical understanding and project experience."),
-            ("System Architect", "High-level understanding of software components and design patterns."),
-            ("QA Automation Engineer", "Good fit for candidates who can reason through reliability, testing, and edge cases."),
-            ("Cloud Engineer", "Relevant for candidates preparing for infrastructure, deployment, and cloud service interviews."),
-            ("Data Analyst", "Useful for analytical interviews involving SQL, reporting, and business metrics."),
-            ("Business Analyst", "Matches candidates who translate requirements into structured solutions."),
-            ("Cybersecurity Analyst", "Covers security fundamentals, risk awareness, and secure system design."),
-            ("Mobile App Developer", "Suitable for app-focused interviews across Android, iOS, and cross-platform stacks."),
-            ("UI/UX Engineer", "Targets frontend implementation, usability thinking, and design-system collaboration."),
-            ("AI Product Engineer", "Blends product judgement with AI-assisted application development."),
-            ("Support Engineer", "Strong option for troubleshooting, communication, and customer-facing technical roles."),
-            ("Operations Manager", "Useful for non-technical resumes with leadership, process, and execution experience."),
-            ("Sales Engineer", "Fits candidates combining technical understanding with client-facing communication.")
-        ]
+        generic_roles = []
+        if any(kw in skills_str for kw in ["python", "java", "react", "software", "developer", "api", "database", "cloud", "docker"]):
+            generic_roles.extend([
+                ("Fullstack Developer", "Resume contains software or web-development evidence."),
+                ("Junior Software Engineer", "Resume contains foundational software engineering evidence."),
+                ("QA Automation Engineer", "Resume contains technical skills that can support software testing interviews."),
+            ])
+        if any(kw in skills_str for kw in ["analysis", "excel", "report", "dashboard", "business", "stakeholder", "process"]):
+            generic_roles.extend([
+                ("Data Analyst", "Resume contains analysis, reporting, dashboard, or metrics evidence."),
+                ("Business Analyst", "Resume contains business, process, stakeholder, or documentation evidence."),
+            ])
+        if any(kw in skills_str for kw in ["customer", "support", "service", "client", "communication"]):
+            generic_roles.append(("Customer Success Specialist", "Resume contains customer, client, service, or communication evidence."))
+        if any(kw in skills_str for kw in ["training", "trainer", "fitness", "coaching", "nutrition"]):
+            generic_roles.extend([
+                ("Fitness Trainer", "Resume contains training, coaching, fitness, or nutrition evidence."),
+                ("Client Wellness Coach", "Resume contains client guidance or wellness coaching evidence."),
+            ])
         
-        while len(potential_roles) < 12 and generic_roles:
+        while len(potential_roles) < 8 and generic_roles:
             role, reason = generic_roles.pop(0)
-            potential_roles.append(JobPreference(role=role, confidence=60.0, reasoning=reason))
+            if role.lower() not in {item.role.lower() for item in potential_roles}:
+                potential_roles.append(JobPreference(role=role, confidence=64.0, reasoning=reason))
+
+        if not potential_roles:
+            potential_roles.append(JobPreference(
+                role="General Interview Practice",
+                confidence=50.0,
+                reasoning="The parsed resume did not contain enough clear role evidence, so a custom role is recommended."
+            ))
 
         return ResumeAnalysis(
             skills=skills,
