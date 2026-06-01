@@ -29,6 +29,10 @@ function InterviewDetailContent() {
   const [data, setData] = useState<any>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const exportReport = () => {
+    window.location.href = `${apiBaseUrl}/api/v1/interviews/${id}/report`;
+  };
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -83,7 +87,7 @@ function InterviewDetailContent() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Button className="rounded-xl px-8 h-12 shadow-lg" onClick={() => window.location.href=`/api/v1/interviews/${id}/report`}>
+          <Button className="rounded-xl px-8 h-12 shadow-lg" onClick={exportReport}>
             <Download size={18} className="mr-2" />
             Export Analytics Report
           </Button>

@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
   useEffect(() => {
     const fetchInterviews = async () => {
@@ -197,7 +198,7 @@ export default function DashboardPage() {
                           <td className="px-8 py-6 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <button 
-                                onClick={() => window.location.href = `/api/v1/reports/${interview.id}/download`}
+                                onClick={() => window.location.href = `${apiBaseUrl}/api/v1/interviews/${interview.id}/report`}
                                 className="p-2.5 bg-white text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all shadow-sm border border-slate-100 hover:border-primary-100"
                                 title="Download PDF Report"
                               >

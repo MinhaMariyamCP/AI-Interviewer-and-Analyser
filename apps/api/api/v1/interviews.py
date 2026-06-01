@@ -11,6 +11,7 @@ import uuid
 import json
 import logging
 import base64
+import re
 from typing import List
 from pydantic import BaseModel
 from datetime import datetime
@@ -68,15 +69,69 @@ def build_final_report(state: dict) -> dict:
         "question_history": [item.get("question") for item in history]
     }
 
-def build_fallback_eval() -> dict:
+def build_fallback_eval(question: str = "", answer: str = "", profile: dict = None, role: str = "") -> dict:
+    profile = profile or {}
+    answer_text = (answer or "").strip()
+    answer_lower = answer_text.lower()
+    words = re.findall(r"\b\w+\b", answer_lower)
+    word_total = len(words)
+
+    resume_terms = []
+    for key in ("technologies", "core_skills"):
+        value = profile.get(key) or []
+        if isinstance(value, list):
+            resume_terms.extend(str(item).lower() for item in value if str(item).strip())
+
+    project_terms = []
+    for project in profile.get("projects") or []:
+        if isinstance(project, dict):
+            project_terms.append(str(project.get("name") or "").lower())
+
+    technical_keywords = [
+        "because", "tradeoff", "architecture", "design", "scale", "scalable", "database",
+        "api", "testing", "debug", "performance", "security", "deploy", "monitor",
+        "optimized", "implemented", "measured", "result", "latency", "cache"
+    ]
+    vague_phrases = ["i don't know", "not sure", "no idea", "maybe", "nothing", "can't remember"]
+
+    detail_score = min(word_total * 1.1, 35)
+    relevance_hits = sum(1 for term in resume_terms[:20] if term and term in answer_lower)
+    project_hits = sum(1 for term in project_terms[:8] if term and term in answer_lower)
+    technical_hits = sum(1 for keyword in technical_keywords if keyword in answer_lower)
+    vague_penalty = 25 if any(phrase in answer_lower for phrase in vague_phrases) else 0
+    too_short_penalty = 25 if word_total < 12 else 0
+
+    technical = 25 + detail_score + min(relevance_hits * 8, 24) + min(project_hits * 8, 16) + min(technical_hits * 4, 20) - vague_penalty - too_short_penalty
+    communication = 30 + min(word_total * 0.9, 35) + (12 if any(token in answer_lower for token in ["first", "then", "finally", "for example", "result"]) else 0) - (15 if word_total < 10 else 0)
+    confidence = 35 + min(word_total * 0.6, 25) - (18 if any(phrase in answer_lower for phrase in ["maybe", "i think", "not sure"]) else 0)
+    depth = 25 + min(technical_hits * 7, 35) + min(relevance_hits * 6, 24) + (10 if any(token in answer_lower for token in ["why", "because", "tradeoff", "alternative"]) else 0) - too_short_penalty
+
+    def clamp(value: float) -> int:
+        return int(max(0, min(100, round(value))))
+
+    weak_areas = []
+    strong_areas = []
+    if word_total < 30:
+        weak_areas.append("Answer needs more detail and concrete evidence.")
+    if relevance_hits == 0:
+        weak_areas.append("Response did not clearly connect to resume skills or projects.")
+    if technical_hits < 2:
+        weak_areas.append("Add more technical reasoning, tradeoffs, and measurable outcomes.")
+    if word_total >= 45:
+        strong_areas.append("Gave a detailed response with enough context to evaluate.")
+    if relevance_hits > 0 or project_hits > 0:
+        strong_areas.append("Connected the answer to resume-specific experience.")
+    if technical_hits >= 3:
+        strong_areas.append("Included technical reasoning and implementation signals.")
+
     return {
-        "technical_score": 55,
-        "communication_score": 55,
-        "confidence_score": 55,
-        "knowledge_depth": 55,
-        "weak_areas": ["Detailed AI analysis was skipped to keep the interview moving."],
-        "strong_areas": ["Response captured successfully."],
-        "reasoning": "Fast fallback evaluation used after the live analysis timeout."
+        "technical_score": clamp(technical),
+        "communication_score": clamp(communication),
+        "confidence_score": clamp(confidence),
+        "knowledge_depth": clamp(depth),
+        "weak_areas": weak_areas or ["Add a little more structure to make the answer easier to assess."],
+        "strong_areas": strong_areas or ["Response captured successfully."],
+        "reasoning": "Fast quality-based fallback evaluation used after the live AI analysis timeout."
     }
 
 def plan_fallback_question(state: dict) -> dict:
@@ -341,7 +396,12 @@ async def interview_stream(websocket: WebSocket, interview_id: str, db: Session 
                     except asyncio.TimeoutError:
                         logger.error("Evaluation Timeout (25s)")
                         await websocket.send_json({"type": "processing", "stage": "Using fast scoring so the interview can continue..."})
-                        fallback_eval = build_fallback_eval()
+                        fallback_eval = build_fallback_eval(
+                            question=last_question,
+                            answer=answer_text,
+                            profile=state.get("candidate_profile") or {},
+                            role=state.get("job_role") or ""
+                        )
                         state["current_turn_eval"] = fallback_eval
                         state["answer_history"] = state.get("answer_history", []) + [{
                             "question": last_question,

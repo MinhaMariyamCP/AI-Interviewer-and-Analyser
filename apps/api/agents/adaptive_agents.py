@@ -181,18 +181,29 @@ class AdaptiveAgents:
                 ["your technical background"]
             )
             core_skills = _safe_list(profile.get("core_skills") or technologies, ["your experience"])
+            projects = profile.get("projects") or []
+            experiences = profile.get("experience") or []
             first_technology = technologies[0]
             last_technology = technologies[-1]
             first_skill = core_skills[0]
-            fallbacks = [
-                f"Can you describe a specific challenge you faced while working with {first_technology}?",
-                f"In your project involving {first_skill}, what was the most difficult decision you had to make?",
-                f"How do you ensure quality and scalability in work that uses {last_technology}?",
-                f"Can you walk me through a complex bug you solved in one of your listed projects?",
-                f"What tradeoffs did you consider when choosing {first_technology} for your project?"
-            ]
-            import random
-            fallback_q = random.choice(fallbacks)
+            project_name = "one of your listed projects"
+            project_desc = ""
+            if projects and isinstance(projects[0], dict):
+                project_name = projects[0].get("name") or project_name
+                project_desc = projects[0].get("desc") or projects[0].get("description") or ""
+            role_context = role
+            if experiences and isinstance(experiences[0], dict):
+                role_context = experiences[0].get("role") or role_context
+            fallbacks = {
+                "Resume Projects": f"In {project_name}, what exact problem were you solving, what did you build, and how did {first_technology} affect your design choices?",
+                "Technical Skills": f"Your resume mentions {first_skill}. Can you explain a real task where you used it, including one implementation detail and one limitation?",
+                "System Design": f"If you had to scale {project_name}, what bottleneck would you handle first and what tradeoff would you make?",
+                "Problem Solving": f"Tell me about a difficult issue from {project_name or role_context}. What clues did you use to find the root cause?",
+                "Behavioral Questions": f"In your {role_context} experience, describe a moment where you had to adapt your approach and what changed because of it.",
+                "Leadership": f"Describe a time you influenced a technical or project decision related to {project_name}. How did you align others?",
+                "Communication": f"How would you explain {project_name}{' (' + project_desc[:90] + ')' if project_desc else ''} to a non-technical stakeholder?"
+            }
+            fallback_q = fallbacks.get(topic, f"Can you describe a specific resume-based example where you used {last_technology} and explain the key tradeoff?")
             
             return {
                 "current_question": fallback_q,

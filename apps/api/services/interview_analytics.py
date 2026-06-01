@@ -3,6 +3,7 @@ import re
 import uuid
 import logging
 from typing import Dict, List, Any
+from xml.sax.saxutils import escape
 from sqlalchemy.orm import Session
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -360,8 +361,8 @@ def generate_analytics_pdf(analytics: InterviewAnalytics, interview: Interview) 
     story = [
         Paragraph("Interview Intelligence Report", title),
         Spacer(1, 0.2 * inch),
-        Paragraph(f"<b>Role:</b> {interview.job_role or 'Technical Interview'}", styles["Normal"]),
-        Paragraph(f"<b>Summary:</b> {data.get('executive_summary') or 'Analytics generated.'}", styles["Normal"]),
+        Paragraph(f"<b>Role:</b> {escape(str(interview.job_role or 'Technical Interview'))}", styles["Normal"]),
+        Paragraph(f"<b>Summary:</b> {escape(str(data.get('executive_summary') or 'Analytics generated.'))}", styles["Normal"]),
         Spacer(1, 0.25 * inch),
     ]
 
@@ -385,11 +386,15 @@ def generate_analytics_pdf(analytics: InterviewAnalytics, interview: Interview) 
         story.append(Paragraph(label, section))
         for item in items[:6]:
             title_text = item.get("title") or item.get("skill_gap") or item.get("severity") or label
-            story.append(Paragraph(f"<b>{title_text}</b>: {item.get(field) or item.get('explanation') or ''}", styles["Normal"]))
+            body_text = item.get(field) or item.get("explanation") or ""
+            story.append(Paragraph(f"<b>{escape(str(title_text))}</b>: {escape(str(body_text))}", styles["Normal"]))
 
     story.append(Paragraph("Topic Analysis", section))
     for topic in data["concept_clarity"][:8]:
-        story.append(Paragraph(f"<b>{topic['topic']}</b>: {topic['topic_score']}% - {topic['explanation']}", styles["Normal"]))
+        story.append(Paragraph(
+            f"<b>{escape(str(topic['topic']))}</b>: {escape(str(topic['topic_score']))}% - {escape(str(topic['explanation']))}",
+            styles["Normal"]
+        ))
 
     doc.build(story)
     pdf = buffer.getvalue()

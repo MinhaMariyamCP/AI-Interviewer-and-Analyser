@@ -63,12 +63,35 @@ class ResumeAnalyzerService:
             logger.error(f"LLM Analysis failed: {str(e)}. Using rule-based fallback.")
             return self._rule_based_analysis(resume_json)
 
+    def _resume_text(self, resume_json: dict) -> str:
+        parts = []
+        for key in ("skills", "technologies"):
+            parts.extend(str(item) for item in resume_json.get(key) or [])
+        for item in resume_json.get("experience") or []:
+            if isinstance(item, dict):
+                parts.extend([
+                    str(item.get("role") or ""),
+                    str(item.get("company") or ""),
+                    " ".join(item.get("description") or []),
+                ])
+        for item in resume_json.get("projects") or []:
+            if isinstance(item, dict):
+                parts.extend([
+                    str(item.get("name") or ""),
+                    str(item.get("description") or ""),
+                    " ".join(item.get("technologies") or []),
+                ])
+        for item in resume_json.get("education") or []:
+            if isinstance(item, dict):
+                parts.extend([str(item.get("degree") or ""), str(item.get("institution") or "")])
+        return " ".join(parts).lower()
+
     def _rule_based_analysis(self, resume_json: dict) -> ResumeAnalysis:
         """
         Fallback logic to ensure the UI is populated even if AI APIs are down/unauthorized.
         """
         skills = resume_json.get("skills") or []
-        skills_str = " ".join(skills).lower()
+        skills_str = self._resume_text(resume_json)
         
         # Simple heuristic matches
         potential_roles = []
@@ -107,6 +130,53 @@ class ResumeAnalyzerService:
                 confidence=70.0, 
                 reasoning="Strong analytical background and data manipulation skills."
             ))
+
+        if any(kw in skills_str for kw in ["excel", "dashboard", "power bi", "tableau", "report", "metrics", "kpi", "analytics"]):
+            potential_roles.append(JobPreference(
+                role="Data Analyst",
+                confidence=84.0,
+                reasoning="Resume signals reporting, metrics, dashboards, or analytical business work."
+            ))
+
+        if any(kw in skills_str for kw in ["requirements", "stakeholder", "process", "documentation", "business", "client"]):
+            potential_roles.append(JobPreference(
+                role="Business Analyst",
+                confidence=82.0,
+                reasoning="Experience appears aligned with requirements gathering, process analysis, and stakeholder communication."
+            ))
+
+        if any(kw in skills_str for kw in ["customer", "support", "troubleshoot", "ticket", "issue", "service"]):
+            potential_roles.append(JobPreference(
+                role="Support Engineer",
+                confidence=78.0,
+                reasoning="Resume includes troubleshooting or customer-facing technical support signals."
+            ))
+
+        if any(kw in skills_str for kw in ["marketing", "sales", "lead", "crm", "campaign", "market"]):
+            potential_roles.append(JobPreference(
+                role="Sales Engineer",
+                confidence=74.0,
+                reasoning="Commercial and communication experience can map well to technical solution-selling interviews."
+            ))
+
+        if any(kw in skills_str for kw in ["fitness", "trainer", "training", "coaching", "nutrition", "client program", "personal trainer"]):
+            potential_roles.append(JobPreference(
+                role="Fitness Trainer",
+                confidence=88.0,
+                reasoning="Resume indicates coaching, training, client guidance, or fitness domain experience."
+            ))
+            potential_roles.append(JobPreference(
+                role="Wellness Program Coordinator",
+                confidence=80.0,
+                reasoning="Training and client-progress experience can fit wellness operations and program coordination interviews."
+            ))
+
+        unique_roles = {}
+        for role in potential_roles:
+            key = role.role.lower()
+            if key not in unique_roles or role.confidence > unique_roles[key].confidence:
+                unique_roles[key] = role
+        potential_roles = sorted(unique_roles.values(), key=lambda item: item.confidence, reverse=True)
             
         # Ensure we always have a broad interview catalogue for the UI requirement.
         generic_roles = [

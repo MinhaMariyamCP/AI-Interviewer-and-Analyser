@@ -112,8 +112,16 @@ class ResumeParserService:
 
     def _regex_fallback(self, text: str) -> ResumeData:
         """Basic extraction fallback using keywords."""
-        skills_bank = ["python", "javascript", "react", "fastapi", "docker", "aws", "sql", "machine learning", "java", "c++", "typescript"]
-        found_skills = [s.capitalize() for s in skills_bank if s in text.lower()]
+        skills_bank = [
+            "python", "javascript", "react", "fastapi", "docker", "aws", "sql",
+            "machine learning", "java", "c++", "typescript", "excel", "power bi",
+            "tableau", "data analysis", "reporting", "dashboard", "analytics",
+            "requirements gathering", "stakeholder management", "documentation",
+            "customer support", "troubleshooting", "sales", "marketing", "crm",
+            "operations", "project management", "communication", "leadership",
+            "training", "coaching", "fitness", "nutrition", "personal trainer"
+        ]
+        found_skills = [s.title() for s in skills_bank if s in text.lower()]
         
         # Simple email/phone regex
         email = re.search(r'[\w\.-]+@[\w\.-]+', text)

@@ -68,6 +68,10 @@ export default function AnalyticsDashboard() {
   const behavioral = charts.behavioral || latest.behavioral || [];
   const questionTimeline = charts.timeline || latest.question_analytics?.performance_timeline || [];
   const confidenceTrend = charts.confidence_trend || latest.confidence?.confidence_trend || [];
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const exportReport = () => {
+    window.location.href = `${apiBaseUrl}/api/v1/interviews/${latest.interview_id}/report`;
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900 dark:bg-slate-950 dark:text-white">
@@ -85,7 +89,7 @@ export default function AnalyticsDashboard() {
                 <p className="text-slate-500 font-medium mt-1 dark:text-slate-300">{latest.executive_summary}</p>
               </div>
             </div>
-            <Button onClick={() => window.location.href = `/api/v1/interviews/${latest.interview_id}/report`} className="rounded-xl px-6">
+            <Button onClick={exportReport} className="rounded-xl px-6">
               <Download size={18} className="mr-2" />
               Export Analytics Report
             </Button>
