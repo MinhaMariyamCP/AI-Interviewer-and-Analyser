@@ -61,7 +61,7 @@ class ResumeAnalyzerService:
                 SystemMessage(content="You are a highly accurate AI career recruiter. Generate personalized job matches."),
                 HumanMessage(content=prompt)
             ])
-            return result
+            return self._merge_with_evidence(resume_json, result)
             
         except Exception as e:
             logger.error(f"LLM Analysis failed: {str(e)}. Using rule-based fallback.")
@@ -90,6 +90,83 @@ class ResumeAnalyzerService:
                 parts.extend([str(item.get("degree") or ""), str(item.get("institution") or "")])
         return " ".join(parts).lower()
 
+    def _add_role(self, roles: dict, role: str, confidence: float, reasoning: str) -> None:
+        key = role.lower()
+        item = JobPreference(role=role, confidence=confidence, reasoning=reasoning)
+        if key not in roles or item.confidence > roles[key].confidence:
+            roles[key] = item
+
+    def _evidence_roles(self, resume_json: dict) -> List[JobPreference]:
+        text = self._resume_text(resume_json)
+        roles = {}
+
+        def has(*keywords: str) -> bool:
+            for keyword in keywords:
+                pattern = r"(?<![a-z0-9])" + re.escape(keyword.lower()) + r"(?![a-z0-9])"
+                if re.search(pattern, text):
+                    return True
+            return False
+
+        if has("python", "fastapi", "django", "flask", "node", "backend", "api", "postgres", "database"):
+            self._add_role(roles, "Backend Software Engineer", 88, "Matched resume evidence for APIs, backend tools, databases, or server-side engineering.")
+        if has("react", "next", "frontend", "typescript", "javascript", "css", "html", "ui"):
+            self._add_role(roles, "Frontend Developer", 86, "Matched resume evidence for frontend technologies or UI implementation.")
+        if has("react", "frontend", "backend", "api", "database") and has("python", "node", "java", "fastapi", "django"):
+            self._add_role(roles, "Fullstack Developer", 84, "Matched resume evidence across both frontend and backend work.")
+        if has("machine learning", "tensorflow", "pytorch", "model", "ml", "artificial intelligence", "data science"):
+            self._add_role(roles, "AI/ML Engineer", 88, "Matched resume evidence for machine learning, AI models, or data science.")
+        if has("sql", "excel", "dashboard", "power bi", "tableau", "report", "metrics", "kpi", "analytics", "data analysis"):
+            self._add_role(roles, "Data Analyst", 88, "Matched resume evidence for reporting, dashboards, metrics, SQL, Excel, or analytics.")
+        if has("requirements", "stakeholder", "process", "documentation", "business analysis", "client", "workflow"):
+            self._add_role(roles, "Business Analyst", 86, "Matched resume evidence for requirements, stakeholders, process, documentation, or client work.")
+        if has("docker", "kubernetes", "aws", "azure", "gcp", "cloud", "ci/cd", "devops", "deployment"):
+            self._add_role(roles, "DevOps Engineer", 84, "Matched resume evidence for cloud, deployment, DevOps, or containerization.")
+        if has("test", "testing", "qa", "automation", "selenium", "quality"):
+            self._add_role(roles, "QA Automation Engineer", 80, "Matched resume evidence for testing, QA, or automation.")
+        if has("customer", "support", "troubleshoot", "ticket", "service desk", "technical support"):
+            self._add_role(roles, "Support Engineer", 82, "Matched resume evidence for troubleshooting, customer support, tickets, or service work.")
+        if has("sales", "crm", "lead", "marketing", "campaign", "business development"):
+            self._add_role(roles, "Sales Engineer", 76, "Matched resume evidence for sales, CRM, leads, marketing, or business development.")
+        if has("operations", "coordination", "scheduling", "process improvement", "team management"):
+            self._add_role(roles, "Operations Manager", 78, "Matched resume evidence for operations, coordination, process improvement, or team management.")
+        if has("fitness", "trainer", "personal trainer", "training", "coaching", "nutrition", "workout"):
+            self._add_role(roles, "Fitness Trainer", 90, "Matched resume evidence for fitness, coaching, training, nutrition, or client workout guidance.")
+            self._add_role(roles, "Wellness Program Coordinator", 82, "Matched resume evidence for client training, wellness guidance, or program coordination.")
+
+        return sorted(roles.values(), key=lambda item: item.confidence, reverse=True)
+
+    def _merge_with_evidence(self, resume_json: dict, llm_result: ResumeAnalysis) -> ResumeAnalysis:
+        evidence_roles = self._evidence_roles(resume_json)
+        if not evidence_roles:
+            return self._rule_based_analysis(resume_json)
+
+        role_map = {role.role.lower(): role for role in evidence_roles}
+        evidence_text = self._resume_text(resume_json)
+        generic_software_roles = ["software engineer", "fullstack developer", "frontend developer", "backend software engineer", "system architect"]
+        has_software_evidence = any(term in evidence_text for term in ["python", "java", "react", "api", "database", "software", "developer", "frontend", "backend"])
+
+        for role in llm_result.suggested_roles or []:
+            key = role.role.lower()
+            if key in role_map:
+                continue
+            if key in generic_software_roles and not has_software_evidence:
+                continue
+            if len(role_map) >= 8:
+                break
+            role_map[key] = JobPreference(
+                role=role.role,
+                confidence=min(float(role.confidence or 70), 76),
+                reasoning=f"AI-supported match. {role.reasoning}"
+            )
+
+        return ResumeAnalysis(
+            skills=llm_result.skills or resume_json.get("skills") or [],
+            technologies=llm_result.technologies or resume_json.get("skills") or [],
+            experience_level=llm_result.experience_level or "Mid-level",
+            strengths=llm_result.strengths or ["Resume evidence matched to target roles"],
+            suggested_roles=sorted(role_map.values(), key=lambda item: item.confidence, reverse=True)
+        )
+
     def _rule_based_analysis(self, resume_json: dict) -> ResumeAnalysis:
         """
         Fallback logic to ensure the UI is populated even if AI APIs are down/unauthorized.
@@ -97,91 +174,8 @@ class ResumeAnalyzerService:
         skills = resume_json.get("skills") or []
         skills_str = self._resume_text(resume_json)
         
-        # Simple heuristic matches
-        potential_roles = []
+        potential_roles = self._evidence_roles(resume_json)
         
-        if any(kw in skills_str for kw in ["python", "java", "backend", "fastapi", "django", "node"]):
-            potential_roles.append(JobPreference(
-                role="Backend Software Engineer", 
-                confidence=85.0, 
-                reasoning="Strong match based on backend development skills found in resume."
-            ))
-        
-        if any(kw in skills_str for kw in ["react", "frontend", "typescript", "css", "vue"]):
-            potential_roles.append(JobPreference(
-                role="Frontend Developer", 
-                confidence=80.0, 
-                reasoning="Demonstrated proficiency in modern frontend frameworks."
-            ))
-
-        if any(kw in skills_str for kw in ["machine learning", "ml", "ai", "pytorch", "tensorflow"]):
-            potential_roles.append(JobPreference(
-                role="AI/ML Engineer", 
-                confidence=90.0, 
-                reasoning="Expertise in artificial intelligence and machine learning frameworks."
-            ))
-
-        if any(kw in skills_str for kw in ["docker", "kubernetes", "aws", "cloud", "devops"]):
-            potential_roles.append(JobPreference(
-                role="DevOps Engineer", 
-                confidence=75.0, 
-                reasoning="Experience with cloud infrastructure and containerization."
-            ))
-
-        if any(kw in skills_str for kw in ["data", "sql", "pandas", "analysis"]):
-            potential_roles.append(JobPreference(
-                role="Data Scientist", 
-                confidence=70.0, 
-                reasoning="Strong analytical background and data manipulation skills."
-            ))
-
-        if any(kw in skills_str for kw in ["excel", "dashboard", "power bi", "tableau", "report", "metrics", "kpi", "analytics"]):
-            potential_roles.append(JobPreference(
-                role="Data Analyst",
-                confidence=84.0,
-                reasoning="Resume signals reporting, metrics, dashboards, or analytical business work."
-            ))
-
-        if any(kw in skills_str for kw in ["requirements", "stakeholder", "process", "documentation", "business", "client"]):
-            potential_roles.append(JobPreference(
-                role="Business Analyst",
-                confidence=82.0,
-                reasoning="Experience appears aligned with requirements gathering, process analysis, and stakeholder communication."
-            ))
-
-        if any(kw in skills_str for kw in ["customer", "support", "troubleshoot", "ticket", "issue", "service"]):
-            potential_roles.append(JobPreference(
-                role="Support Engineer",
-                confidence=78.0,
-                reasoning="Resume includes troubleshooting or customer-facing technical support signals."
-            ))
-
-        if any(kw in skills_str for kw in ["marketing", "sales", "lead", "crm", "campaign", "market"]):
-            potential_roles.append(JobPreference(
-                role="Sales Engineer",
-                confidence=74.0,
-                reasoning="Commercial and communication experience can map well to technical solution-selling interviews."
-            ))
-
-        if any(kw in skills_str for kw in ["fitness", "trainer", "training", "coaching", "nutrition", "client program", "personal trainer"]):
-            potential_roles.append(JobPreference(
-                role="Fitness Trainer",
-                confidence=88.0,
-                reasoning="Resume indicates coaching, training, client guidance, or fitness domain experience."
-            ))
-            potential_roles.append(JobPreference(
-                role="Wellness Program Coordinator",
-                confidence=80.0,
-                reasoning="Training and client-progress experience can fit wellness operations and program coordination interviews."
-            ))
-
-        unique_roles = {}
-        for role in potential_roles:
-            key = role.role.lower()
-            if key not in unique_roles or role.confidence > unique_roles[key].confidence:
-                unique_roles[key] = role
-        potential_roles = sorted(unique_roles.values(), key=lambda item: item.confidence, reverse=True)
-            
         # Ensure we always have a broad interview catalogue for the UI requirement.
         generic_roles = []
         if any(kw in skills_str for kw in ["python", "java", "react", "software", "developer", "api", "database", "cloud", "docker"]):

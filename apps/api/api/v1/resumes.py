@@ -62,6 +62,33 @@ async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_
     finally:
         await file.close()
 
+@router.post("/{resume_id}/reanalyze")
+async def reanalyze_resume(resume_id: str, db: Session = Depends(get_db)):
+    """
+    Re-run role analysis for an already uploaded resume.
+    Useful after role-matching logic changes or when old analysis was too generic.
+    """
+    logger.info(f"--- POST /resumes/{resume_id}/reanalyze requested ---")
+    try:
+        resume_uuid = uuid.UUID(resume_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid resume_id format")
+
+    resume = db.query(Resume).filter(Resume.id == resume_uuid).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    analysis_result = await analyzer_service.analyze(resume.parsed_content or {})
+    resume.analysis_result = analysis_result.model_dump()
+    db.commit()
+    db.refresh(resume)
+
+    return {
+        "id": str(resume.id),
+        "parsed_content": resume.parsed_content,
+        "analysis_result": resume.analysis_result
+    }
+
 @router.get("/{resume_id}")
 async def get_resume_data(resume_id: str, db: Session = Depends(get_db)):
     """

@@ -24,26 +24,13 @@ interface JobPreference {
   source?: 'resume' | 'practice';
 }
 
-const DEFAULT_ROLE_LIBRARY: JobPreference[] = [
-  { role: 'Backend Software Engineer', confidence: 45, reasoning: 'Additional practice role for APIs, databases, and backend architecture.', source: 'practice' },
-  { role: 'Frontend Developer', confidence: 45, reasoning: 'Additional practice role for UI engineering, React, accessibility, and performance.', source: 'practice' },
-  { role: 'Fullstack Developer', confidence: 44, reasoning: 'Additional practice role covering frontend, backend, and product delivery.', source: 'practice' },
-  { role: 'AI/ML Engineer', confidence: 43, reasoning: 'Additional practice role for model workflows, evaluation, and applied AI systems.', source: 'practice' },
-  { role: 'Data Analyst', confidence: 43, reasoning: 'Additional practice role for SQL, reporting, dashboards, and metrics.', source: 'practice' },
-  { role: 'Business Analyst', confidence: 42, reasoning: 'Additional practice role for requirements, process mapping, and stakeholder communication.', source: 'practice' },
-  { role: 'Support Engineer', confidence: 42, reasoning: 'Additional practice role for troubleshooting and customer-facing technical diagnosis.', source: 'practice' },
-  { role: 'Operations Manager', confidence: 40, reasoning: 'Additional practice role for process ownership, execution, and performance improvement.', source: 'practice' },
-];
-
 const mergeRoles = (roles: JobPreference[] = []) => {
   const roleMap = new Map<string, JobPreference>();
 
   const resumeRoles = roles
     .filter((item) => item?.role)
     .map((item) => ({ ...item, role: item.role.trim(), confidence: Math.round(item.confidence), source: 'resume' as const }));
-  const includePracticeRoles = resumeRoles.length < 6;
-
-  [...resumeRoles, ...(includePracticeRoles ? DEFAULT_ROLE_LIBRARY : [])].forEach((item) => {
+  resumeRoles.forEach((item) => {
     if (!item?.role) return;
     const key = item.role.trim().toLowerCase();
     const existing = roleMap.get(key);
@@ -80,22 +67,29 @@ export default function RoleSelectionPage() {
         setError('Resume context missing. Please upload your resume again.');
         setIsLoading(false);
         return;
-      }
+        }
 
       try {
-        const response = await api.get(`/api/v1/resumes/${resumeId}`);
+        const response = await api.post(`/api/v1/resumes/${resumeId}/reanalyze`);
         const analysis = response.data.analysis_result;
         
-        if (analysis && analysis.suggested_roles) {
+        if (analysis && analysis.suggested_roles?.length) {
           setSuggestedRoles(mergeRoles(analysis.suggested_roles));
         } else {
-          setSuggestedRoles(mergeRoles());
-          setError('AI recommendations were limited, so the full role library is shown below.');
+          setSuggestedRoles([]);
+          setError('No confident resume-based matches were found. Please use Custom / Niche Role.');
         }
       } catch (err) {
         console.error("Failed to fetch recommendations", err);
-        setSuggestedRoles(mergeRoles());
-        setError('Failed to connect to the analysis engine.');
+        try {
+          const response = await api.get(`/api/v1/resumes/${resumeId}`);
+          const analysis = response.data.analysis_result;
+          setSuggestedRoles(mergeRoles(analysis?.suggested_roles || []));
+          setError('Using saved role analysis because fresh analysis could not be generated.');
+        } catch {
+          setSuggestedRoles([]);
+          setError('Failed to connect to the analysis engine.');
+        }
       } finally {
         setIsLoading(false);
       }
@@ -151,7 +145,7 @@ export default function RoleSelectionPage() {
             Personalized Recommendations
           </div>
           <h1 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">Select Your Target Role</h1>
-          <p className="text-slate-500 font-medium">Choose from AI-suggested roles or specify a custom one.</p>
+          <p className="text-slate-500 font-medium">Choose from roles backed by your resume evidence or specify a custom one.</p>
         </div>
         
         {error && (
@@ -214,6 +208,15 @@ export default function RoleSelectionPage() {
               )}
             </div>
           ))}
+
+          {visibleRoles.length === 0 && (
+            <div className="lg:col-span-2 p-8 rounded-[2rem] border-2 border-dashed border-slate-200 bg-white text-center">
+              <h3 className="font-black text-slate-900 mb-2">No confident resume matches yet</h3>
+              <p className="text-sm text-slate-500 font-medium">
+                The parser did not find enough evidence for a specific role. Use the custom option and the interview will tailor questions to that target.
+              </p>
+            </div>
+          )}
 
           {/* Custom Role Option */}
           <div 
