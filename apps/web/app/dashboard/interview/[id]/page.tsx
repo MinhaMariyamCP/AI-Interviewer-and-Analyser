@@ -191,6 +191,20 @@ function InterviewDetailContent() {
                       ))}
                    </div>
                 </div>
+                <div>
+                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Career Recommendations</h4>
+                   <div className="space-y-3">
+                      {((analytics?.career_recommendations || analytics?.charts?.career_recommendations || []) as any[]).slice(0, 3).map((item: any) => (
+                        <div key={item.role} className="p-3 bg-white rounded-xl border border-slate-100 text-xs">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-black text-slate-900">{item.role}</p>
+                            <p className="font-black text-emerald-500">{item.fit_score}%</p>
+                          </div>
+                          <p className="text-slate-500 mt-1">{item.why}</p>
+                        </div>
+                      ))}
+                   </div>
+                </div>
               </CardContent>
            </Card>
 

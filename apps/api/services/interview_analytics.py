@@ -29,6 +29,50 @@ TOPIC_KEYWORDS = {
     "Web Development": ["react", "next", "api", "frontend", "backend", "web"],
 }
 
+CAREER_FAMILIES = {
+    "software": {
+        "keywords": ["python", "java", "react", "node", "api", "database", "software", "developer", "frontend", "backend", "typescript", "javascript", "docker"],
+        "roles": [
+            ("Frontend Developer", ["react", "typescript", "javascript", "css", "frontend", "ui"]),
+            ("Backend Software Engineer", ["python", "java", "node", "api", "database", "backend", "fastapi"]),
+            ("Fullstack Developer", ["react", "api", "database", "frontend", "backend"]),
+            ("QA Automation Engineer", ["testing", "test", "automation", "quality"]),
+        ],
+    },
+    "data": {
+        "keywords": ["sql", "excel", "dashboard", "power bi", "tableau", "report", "metrics", "kpi", "analytics", "data analysis"],
+        "roles": [
+            ("Data Analyst", ["sql", "excel", "dashboard", "analytics", "metrics", "report"]),
+            ("Business Intelligence Analyst", ["power bi", "tableau", "dashboard", "kpi", "reporting"]),
+            ("Business Analyst", ["requirements", "stakeholder", "process", "business", "documentation"]),
+        ],
+    },
+    "fitness": {
+        "keywords": ["fitness", "trainer", "personal trainer", "workout", "nutrition", "coaching", "gym", "wellness"],
+        "roles": [
+            ("Fitness Trainer", ["fitness", "trainer", "workout", "coaching"]),
+            ("Wellness Coach", ["wellness", "nutrition", "coaching", "client"]),
+            ("Wellness Program Coordinator", ["program", "training", "client", "wellness"]),
+        ],
+    },
+    "business": {
+        "keywords": ["requirements", "stakeholder", "process", "documentation", "business analysis", "workflow", "operations"],
+        "roles": [
+            ("Business Analyst", ["requirements", "stakeholder", "process", "documentation"]),
+            ("Operations Coordinator", ["operations", "coordination", "workflow", "process"]),
+            ("Project Coordinator", ["project", "planning", "stakeholder", "coordination"]),
+        ],
+    },
+    "support": {
+        "keywords": ["customer support", "technical support", "troubleshoot", "ticket", "service desk", "customer", "client"],
+        "roles": [
+            ("Support Engineer", ["technical support", "troubleshoot", "ticket", "customer"]),
+            ("Customer Success Specialist", ["customer", "client", "communication", "service"]),
+            ("Technical Support Analyst", ["support", "troubleshoot", "technical", "issue"]),
+        ],
+    },
+}
+
 
 def clamp(value: float) -> float:
     return round(max(0, min(100, value)), 1)
@@ -43,14 +87,116 @@ def word_count(text: str) -> int:
     return len(re.findall(r"\b\w+\b", text or ""))
 
 
+def text_hits(text: str, keywords: List[str]) -> int:
+    text = (text or "").lower()
+    hits = 0
+    for keyword in keywords:
+        pattern = r"(?<![a-z0-9])" + re.escape(keyword.lower()) + r"(?![a-z0-9])"
+        if re.search(pattern, text):
+            hits += 1
+    return hits
+
+
+def resume_text(resume: Resume) -> str:
+    parsed = resume.parsed_content if resume else {}
+    parts = []
+    for key in ("skills", "technologies"):
+        parts.extend(str(item) for item in parsed.get(key) or [])
+    for item in parsed.get("experience") or []:
+        if isinstance(item, dict):
+            parts.extend([
+                str(item.get("role") or ""),
+                str(item.get("company") or ""),
+                " ".join(item.get("description") or []),
+            ])
+    for item in parsed.get("projects") or []:
+        if isinstance(item, dict):
+            parts.extend([
+                str(item.get("name") or ""),
+                str(item.get("description") or ""),
+                " ".join(item.get("technologies") or []),
+            ])
+    if resume and resume.analysis_result:
+        for role in resume.analysis_result.get("suggested_roles") or []:
+            parts.extend([str(role.get("role") or ""), str(role.get("reasoning") or "")])
+    return " ".join(parts).lower()
+
+
 def score_from_keywords(answer: str, keywords: List[str], base: float = 45) -> float:
     text = (answer or "").lower()
     hits = sum(1 for keyword in keywords if keyword in text)
     return clamp(base + min(hits * 12, 45) + min(word_count(text) / 12, 10))
 
 
+def build_career_recommendations(interview: Interview, resume: Resume, turns: List[InterviewData], overall_scores: Dict[str, float], strengths: List[Dict[str, Any]], weaknesses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    r_text = resume_text(resume)
+    answers_text = " ".join(turn.answer_transcript or "" for turn in turns).lower()
+    selected_role = (interview.job_role or "").lower()
+    combined_text = f"{r_text} {answers_text} {selected_role}"
+
+    family_scores = {}
+    for family, data in CAREER_FAMILIES.items():
+        resume_signal = text_hits(r_text, data["keywords"])
+        interview_signal = text_hits(answers_text, data["keywords"])
+        role_signal = text_hits(selected_role, data["keywords"])
+        family_scores[family] = (resume_signal * 16) + (interview_signal * 7) + (role_signal * 12)
+
+    best_family = max(family_scores, key=family_scores.get)
+    if family_scores[best_family] == 0:
+        best_family = "software" if text_hits(selected_role, ["engineer", "developer", "technical"]) else "business"
+
+    technical = float(overall_scores.get("technical_knowledge") or 0)
+    communication = float(overall_scores.get("communication") or 0)
+    confidence = float(overall_scores.get("confidence") or 0)
+    overall = float(overall_scores.get("overall_score") or 0)
+    performance = (overall * 0.35) + (technical * 0.25) + (communication * 0.25) + (confidence * 0.15)
+
+    positive_titles = [str(item.get("title") or "").lower() for item in strengths]
+    weakness_titles = [str(item.get("title") or "").lower() for item in weaknesses]
+    recommendations = []
+    seen = set()
+
+    for index, (role, keywords) in enumerate(CAREER_FAMILIES[best_family]["roles"]):
+        role_key = role.lower()
+        if role_key in seen:
+            continue
+        seen.add(role_key)
+
+        evidence_hits = text_hits(combined_text, keywords)
+        if evidence_hits == 0:
+            continue
+        selected_bonus = 7 if role_key == selected_role or role_key in selected_role or selected_role in role_key else 0
+        strength_bonus = min(sum(1 for title in positive_titles if text_hits(title, keywords)) * 3, 6)
+        weakness_penalty = min(sum(1 for title in weakness_titles if text_hits(title, keywords)) * 2, 6)
+        rank_penalty = index * 3.7
+        score = clamp(45 + min(evidence_hits * 6.5, 26) + (performance * 0.24) + selected_bonus + strength_bonus - weakness_penalty - rank_penalty)
+
+        matched = [keyword for keyword in keywords if text_hits(combined_text, [keyword])][:4]
+        if not matched:
+            matched = CAREER_FAMILIES[best_family]["keywords"][:2]
+
+        recommendations.append({
+            "role": role,
+            "fit_score": score,
+            "career_path": best_family.replace("_", " ").title(),
+            "why": f"Best aligned with {', '.join(matched)} plus interview performance in {interview.job_role or 'the target role'}.",
+            "evidence": matched,
+            "readiness": "Strong fit" if score >= 80 else "Developing fit" if score >= 65 else "Stretch role",
+            "next_step": "Practice deeper examples and measurable outcomes for this path." if score < 75 else "Prepare role-specific stories and project walkthroughs.",
+        })
+
+    return sorted(recommendations, key=lambda item: item["fit_score"], reverse=True)[:3]
+
+
 def extract_turn_eval(turn: InterviewData) -> Dict[str, Any]:
     data = turn.detailed_evaluation or {}
+    career_recommendations = build_career_recommendations(interview, resume, turns, {
+        "overall_score": overall,
+        "technical_knowledge": technical,
+        "communication": communication,
+        "confidence": confidence,
+    }, strengths, weaknesses)
+
     return {
         "technical_score": data.get("technical_score", turn.technical_score or 0),
         "communication_score": data.get("communication_score", turn.communication_score or 0),
@@ -273,7 +419,9 @@ def generate_analytics_payload(interview: Interview, resume: Resume, turns: List
             "confidence_trend": [{"name": f"Q{i + 1}", "score": item["confidence_score"]} for i, item in enumerate(question_analytics["items"])],
             "technical_depth": technical_depth,
             "behavioral": behavioral,
+            "career_recommendations": career_recommendations,
         },
+        "career_recommendations": career_recommendations,
         "executive_summary": f"{interview.job_role or 'Technical'} interview completed with an overall intelligence score of {overall}%.",
     }
 
@@ -285,7 +433,7 @@ def analyze_interview(interview_id: str, db: Session) -> InterviewAnalytics:
         raise ValueError("Interview not found")
 
     existing = db.query(InterviewAnalytics).filter(InterviewAnalytics.interview_id == interview_uuid).first()
-    if existing and existing.status == "completed":
+    if existing and existing.status == "completed" and (existing.charts or {}).get("career_recommendations"):
         return existing
 
     analytics = existing or InterviewAnalytics(interview_id=interview_uuid, status="pending")
@@ -345,6 +493,7 @@ def serialize_analytics(analytics: InterviewAnalytics) -> Dict[str, Any]:
         "question_analytics": analytics.question_analytics or {},
         "improvement_roadmap": analytics.improvement_roadmap or [],
         "charts": analytics.charts or {},
+        "career_recommendations": (analytics.charts or {}).get("career_recommendations", []),
         "executive_summary": analytics.executive_summary,
         "created_at": analytics.created_at.isoformat() if analytics.created_at else None,
         "updated_at": analytics.updated_at.isoformat() if analytics.updated_at else None,
@@ -393,6 +542,13 @@ def generate_analytics_pdf(analytics: InterviewAnalytics, interview: Interview) 
     for topic in data["concept_clarity"][:8]:
         story.append(Paragraph(
             f"<b>{escape(str(topic['topic']))}</b>: {escape(str(topic['topic_score']))}% - {escape(str(topic['explanation']))}",
+            styles["Normal"]
+        ))
+
+    story.append(Paragraph("Career Recommendations", section))
+    for item in data.get("career_recommendations", [])[:3]:
+        story.append(Paragraph(
+            f"<b>{escape(str(item.get('role')))}</b>: {escape(str(item.get('fit_score')))}% - {escape(str(item.get('why') or ''))}",
             styles["Normal"]
         ))
 

@@ -210,6 +210,8 @@ async def get_interview_analytics(interview_id: str, db: Session = Depends(get_d
     analytics = db.query(InterviewAnalytics).filter(InterviewAnalytics.interview_id == interview.id).first()
     if not analytics:
         return {"status": "pending", "message": "Generating Interview Insights..."}
+    if not (analytics.charts or {}).get("career_recommendations"):
+        analytics = analyze_interview(interview_id, db)
     return serialize_analytics(analytics)
 
 @router.get("/{interview_id}/charts")
@@ -232,7 +234,7 @@ async def get_interview_improvements(interview_id: str, db: Session = Depends(ge
 async def download_interview_analytics_report(interview_id: str, db: Session = Depends(get_db)):
     interview = get_interview_or_404(interview_id, db)
     analytics = db.query(InterviewAnalytics).filter(InterviewAnalytics.interview_id == interview.id).first()
-    if not analytics:
+    if not analytics or not (analytics.charts or {}).get("career_recommendations"):
         analytics = analyze_interview(interview_id, db)
     pdf = generate_analytics_pdf(analytics, interview)
     return Response(

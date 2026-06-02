@@ -68,6 +68,7 @@ export default function AnalyticsDashboard() {
   const behavioral = charts.behavioral || latest.behavioral || [];
   const questionTimeline = charts.timeline || latest.question_analytics?.performance_timeline || [];
   const confidenceTrend = charts.confidence_trend || latest.confidence?.confidence_trend || [];
+  const careerRecommendations = latest.career_recommendations || charts.career_recommendations || [];
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const exportReport = () => {
     window.location.href = `${apiBaseUrl}/api/v1/interviews/${latest.interview_id}/report`;
@@ -216,6 +217,39 @@ export default function AnalyticsDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="border-none shadow-sm ring-1 ring-slate-100 mb-8 dark:ring-slate-800">
+          <CardHeader className="p-8">
+            <CardTitle className="text-xl font-black">Career Recommendations</CardTitle>
+            <CardDescription>Distinct role paths ranked from resume evidence, selected target role, and interview performance.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-8 pt-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {(careerRecommendations || []).map((item: any, index: number) => (
+              <div key={`${item.role}-${index}`} className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm dark:bg-slate-900 dark:border-slate-800">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div>
+                    <p className="text-[10px] font-black text-primary-600 uppercase tracking-widest mb-1">{item.career_path}</p>
+                    <h3 className="font-black text-slate-900 dark:text-white">{item.role}</h3>
+                  </div>
+                  <p className="text-2xl font-black font-mono text-emerald-500">{item.fit_score}%</p>
+                </div>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{item.readiness}</p>
+                <p className="text-sm text-slate-500 leading-relaxed mb-4 dark:text-slate-300">{item.why}</p>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {(item.evidence || []).map((tag: string) => (
+                    <span key={tag} className="px-2 py-1 rounded-lg bg-primary-50 text-primary-700 text-[10px] font-black uppercase tracking-wider">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{item.next_step}</p>
+              </div>
+            ))}
+            {(!careerRecommendations || careerRecommendations.length === 0) && (
+              <p className="text-sm text-slate-500 font-medium">Complete a fresh interview to generate career recommendations.</p>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
           <MiniBar title="Technical Depth Breakdown" data={technicalDepth} labelKey="category" valueKey="score" />

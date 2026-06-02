@@ -32,7 +32,7 @@ async def get_all_interview_analytics(db: Session = Depends(get_db)):
     completed_interviews = db.query(Interview).filter(Interview.status == "completed").all()
     for interview in completed_interviews:
         exists = db.query(InterviewAnalytics).filter(InterviewAnalytics.interview_id == interview.id).first()
-        if not exists:
+        if not exists or not (exists.charts or {}).get("career_recommendations"):
             analyze_interview(str(interview.id), db)
 
     analytics_records = db.query(InterviewAnalytics).order_by(InterviewAnalytics.created_at.desc()).all()
