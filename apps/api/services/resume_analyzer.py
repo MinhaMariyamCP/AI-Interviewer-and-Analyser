@@ -1,7 +1,6 @@
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 import os
 import json
@@ -13,16 +12,16 @@ logger = logging.getLogger(__name__)
 # --- Output Schema ---
 
 class JobPreference(BaseModel):
-    role: str = Field(description="Recommended job title (e.g., Senior AI Engineer)")
-    confidence: float = Field(description="Confidence score from 0-100")
-    reasoning: str = Field(description="Brief explanation of why this role matches the resume")
+    role: Optional[str] = Field(default="", description="Recommended job title (e.g., Senior AI Engineer)")
+    confidence: Optional[float] = Field(default=0.0, description="Confidence score from 0-100")
+    reasoning: Optional[str] = Field(default="", description="Brief explanation of why this role matches the resume")
 
 class ResumeAnalysis(BaseModel):
-    skills: List[str] = Field(description="Core hard skills and soft skills extracted from the resume")
-    technologies: List[str] = Field(description="Specific tools, frameworks, and programming languages")
-    experience_level: str = Field(description="Calculated seniority: Junior, Mid-level, Senior, or Lead")
-    strengths: List[str] = Field(description="Top 3-5 unique value propositions")
-    suggested_roles: List[JobPreference] = Field(description="At least 10 personalized job role recommendations")
+    skills: List[str] = Field(default_factory=list, description="Core hard skills and soft skills extracted from the resume")
+    technologies: List[str] = Field(default_factory=list, description="Specific tools, frameworks, and programming languages")
+    experience_level: Optional[str] = Field(default="Mid-level", description="Calculated seniority: Junior, Mid-level, Senior, or Lead")
+    strengths: List[str] = Field(default_factory=list, description="Top 3-5 unique value propositions")
+    suggested_roles: List[JobPreference] = Field(default_factory=list, description="At least 10 personalized job role recommendations")
 
 # Rebuild models for Pydantic v2 compatibility
 ResumeAnalysis.model_rebuild()
@@ -31,21 +30,22 @@ ResumeAnalysis.model_rebuild()
 
 class ResumeAnalyzerService:
     def __init__(self, api_key: str = None):
-        google_key = os.getenv("GOOGLE_API_KEY")
         openai_key = api_key or os.getenv("OPENAI_API_KEY")
         
-        if google_key and not google_key.startswith("AQ."):
-            logger.info("Using Google Gemini for ResumeAnalyzerService")
-            self.llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash",
-                google_api_key=google_key,
-                temperature=0
-            )
-        else:
-            logger.info("Using OpenAI GPT for ResumeAnalyzerService")
+        openai_is_valid = openai_key and openai_key.startswith("sk-") and len(openai_key) > 20
+        
+        if openai_is_valid:
+            logger.info("Using OpenAI GPT-4o-Mini for ResumeAnalyzerService")
             self.llm = ChatOpenAI(
                 model="gpt-4o-mini",
                 openai_api_key=openai_key,
+                temperature=0
+            )
+        else:
+            logger.warning("No valid OpenAI API key found. Defaulting to OpenAI GPT-4o-Mini constructor (may fail).")
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                openai_api_key=openai_key or "dummy-key",
                 temperature=0
             )
         self.structured_llm = self.llm.with_structured_output(ResumeAnalysis)
@@ -69,69 +69,30 @@ class ResumeAnalyzerService:
         {json.dumps(resume_json, indent=2)}
         """
 
-        try:
-            google_key = os.getenv("GOOGLE_API_KEY")
-            if google_key and not google_key.startswith("AQ."):
-                logger.info("Invoking native Google Gemini for Resume Analysis...")
-                import google.generativeai as genai
-                genai.configure(api_key=google_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
-                
-                import asyncio
-                from functools import partial
-                
-                loop = asyncio.get_running_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    partial(
-                        model.generate_content,
-                        [
-                            "You are a highly accurate AI career recruiter. Generate personalized job matches.",
-                            prompt
-                        ],
-                        generation_config=genai.GenerationConfig(
-                            response_mime_type="application/json",
-                            response_schema=ResumeAnalysis,
-                            temperature=0.0
-                        )
-                    )
-                )
-                logger.info("Native Gemini analysis successful")
-                data = json.loads(response.text)
-                return ResumeAnalysis(**data)
-            else:
-                logger.info("Calling OpenAI (via Langchain) for Resume Analysis")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        openai_is_valid = openai_key and openai_key.startswith("sk-") and len(openai_key) > 20
+
+        if openai_is_valid:
+            try:
+                logger.info("Calling OpenAI (GPT-4o-Mini) for Resume Analysis")
                 result = await self.structured_llm.ainvoke([
                     SystemMessage(content="You are a highly accurate AI career recruiter. Generate personalized job matches."),
                     HumanMessage(content=prompt)
                 ])
                 return result
-            
-        except Exception as e:
-            logger.error(f"LLM Analysis failed: {str(e)}. Using rule-based fallback.", exc_info=True)
+            except Exception as openai_err:
+                logger.error(f"OpenAI analysis failed: {openai_err}. Using rule-based fallback.")
+                return self._rule_based_analysis(resume_json)
+        else:
+            logger.info("No valid OpenAI API key found. Using rule-based fallback.")
             return self._rule_based_analysis(resume_json)
 
     def _resume_text(self, resume_json: dict) -> str:
         parts = []
-        for key in ("skills", "technologies"):
+        for key in ("skills", "certifications", "past_job_titles"):
             parts.extend(str(item) for item in resume_json.get(key) or [])
-        for item in resume_json.get("experience") or []:
-            if isinstance(item, dict):
-                parts.extend([
-                    str(item.get("role") or ""),
-                    str(item.get("company") or ""),
-                    " ".join(item.get("description") or []),
-                ])
-        for item in resume_json.get("projects") or []:
-            if isinstance(item, dict):
-                parts.extend([
-                    str(item.get("name") or ""),
-                    str(item.get("description") or ""),
-                    " ".join(item.get("technologies") or []),
-                ])
-        for item in resume_json.get("education") or []:
-            if isinstance(item, dict):
-                parts.extend([str(item.get("degree") or ""), str(item.get("institution") or "")])
+        parts.append(str(resume_json.get("education_level") or ""))
+        parts.append(str(resume_json.get("years_of_experience") or ""))
         return " ".join(parts).lower()
 
     def _add_role(self, roles: dict, role: str, confidence: float, reasoning: str) -> None:
@@ -282,7 +243,6 @@ class ResumeAnalyzerService:
         
         potential_roles = self._evidence_roles(resume_json)
         
-        # Ensure we always have a broad interview catalogue for the UI requirement.
         generic_roles = []
         domain = self._dominant_domain(skills_str)
         if domain in {"software", "devops"} and any(kw in skills_str for kw in ["python", "java", "react", "software", "developer", "api", "database", "cloud", "docker"]):

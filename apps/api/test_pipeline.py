@@ -24,28 +24,13 @@ async def test_pipeline():
     """
     
     print("1. Testing Parser Model...")
-    # Mocking the byte extraction to focus on LLM structuring
-    mock_bytes = b"dummy"
-    
     # We'll just test the analysis part directly as parser structuring is similar
     structured_data = {
-        "full_name": "John Doe",
         "skills": ["Python", "FastAPI", "React", "Machine Learning", "LangChain"],
-        "experience": [
-            {
-                "company": "Tech Corp",
-                "role": "Senior Software Engineer",
-                "duration": "2020-Present",
-                "description": ["Built high-performance API", "Implemented ML models"]
-            }
-        ],
-        "projects": [
-            {
-                "name": "AI Chatbot",
-                "description": "LangGraph-powered agent",
-                "technologies": ["LangGraph", "Python"]
-            }
-        ]
+        "years_of_experience": "6 years",
+        "education_level": "Bachelor's",
+        "certifications": [],
+        "past_job_titles": ["Senior Software Engineer", "Software Developer"]
     }
     
     print("2. Testing Analyzer Service...")
@@ -62,7 +47,6 @@ async def test_pipeline():
     print("\nSUCCESS: Pipeline verified with real LLM response.")
 
 if __name__ == "__main__":
-    # Ensure GOOGLE_API_KEY is available
     from dotenv import load_dotenv
     load_dotenv()
     

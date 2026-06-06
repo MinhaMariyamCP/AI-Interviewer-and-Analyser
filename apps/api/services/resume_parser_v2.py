@@ -1,7 +1,6 @@
-from typing import List, Dict, Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 import os
 import fitz  # PyMuPDF
@@ -13,55 +12,38 @@ import re
 
 logger = logging.getLogger(__name__)
 
-# --- 1. Structured Data Models ---
-
-class Experience(BaseModel):
-    company: str
-    role: str
-    duration: str
-    description: List[str]
-
-class Education(BaseModel):
-    institution: str
-    degree: str
-    year: str
-
-class Project(BaseModel):
-    name: str
-    description: str
-    technologies: List[str]
+# --- 1. Structured Data Model ---
 
 class ResumeData(BaseModel):
-    full_name: Optional[str]
-    email: Optional[str]
-    phone: Optional[str]
-    skills: List[str]
-    experience: List[Experience]
-    education: List[Education]
-    projects: List[Project]
+    skills: List[str] = Field(default_factory=list, description="A comprehensive list of skills and technologies")
+    years_of_experience: Optional[str] = Field(default="Not specified", description="Calculated total years of experience")
+    education_level: Optional[str] = Field(default="Not specified", description="Highest level of education obtained")
+    certifications: List[str] = Field(default_factory=list, description="List of professional certifications")
+    past_job_titles: List[str] = Field(default_factory=list, description="List of past job roles or titles held")
 
-# Rebuild models for Pydantic v2 compatibility with nested types
+# Rebuild models for Pydantic v2 compatibility
 ResumeData.model_rebuild()
 
 # --- 2. Parser Service ---
 
 class ResumeParserService:
     def __init__(self, api_key: str = None):
-        google_key = os.getenv("GOOGLE_API_KEY")
         openai_key = api_key or os.getenv("OPENAI_API_KEY")
         
-        if google_key and not google_key.startswith("AQ."):
-            logger.info("Using Google Gemini for ResumeParserService")
-            self.llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash",
-                google_api_key=google_key,
-                temperature=0
-            )
-        else:
-            logger.info("Using OpenAI GPT for ResumeParserService")
+        openai_is_valid = openai_key and openai_key.startswith("sk-") and len(openai_key) > 20
+        
+        if openai_is_valid:
+            logger.info("Using OpenAI GPT-4o-Mini for ResumeParserService")
             self.llm = ChatOpenAI(
                 model="gpt-4o-mini",
                 openai_api_key=openai_key,
+                temperature=0
+            )
+        else:
+            logger.warning("No valid OpenAI API key found. Defaulting to OpenAI GPT-4o-Mini constructor (may fail).")
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                openai_api_key=openai_key or "dummy-key",
                 temperature=0
             )
         self.structured_llm = self.llm.with_structured_output(ResumeData)
@@ -106,58 +88,38 @@ class ResumeParserService:
             return self._get_empty_fallback()
 
         prompt = f"""
-        You are an expert resume parser. Extract every detail from the resume text and map it exhaustively to the structured schema.
+        You are an expert resume parser. Extract the candidate's core details from the resume text and map them to the structured schema.
         Do not summarize or truncate descriptions. Be comprehensive and thorough.
         
         Fields to extract:
-        - full_name: The candidate's name.
-        - email: The candidate's email address.
-        - phone: The candidate's phone number.
-        - skills: A comprehensive list of technical skills, programming languages, libraries, frameworks, tools, soft skills, and certifications mentioned in the resume.
-        - experience: Every professional experience item, capturing the company name, role/title, duration, and detailed bullet points of responsibilities and achievements.
-        - education: Every academic institution, degree obtained (with major), and year of completion or duration.
-        - projects: Every personal or professional project, capturing its name, detailed description of the implementation, and the specific technologies used.
+        - skills: A comprehensive list of technical skills, programming languages, libraries, frameworks, tools, and certifications.
+        - years_of_experience: The total years of experience, or a calculated estimation (e.g. '5 years', '2.5 years', or 'Not specified').
+        - education_level: Highest degree or education level obtained (e.g. 'Bachelor's', 'Master's', 'PhD', 'High School', or 'None').
+        - certifications: A list of professional certifications mentioned.
+        - past_job_titles: A list of job titles/roles the candidate held in their work experience.
 
         Resume Text:
         {raw_text}
         """
 
-        try:
-            google_key = os.getenv("GOOGLE_API_KEY")
-            if google_key and not google_key.startswith("AQ."):
-                logger.info("Invoking native Google Gemini for resume parsing...")
-                import google.generativeai as genai
-                genai.configure(api_key=google_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
-                
-                import asyncio
-                from functools import partial
-                
-                loop = asyncio.get_running_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    partial(
-                        model.generate_content,
-                        prompt,
-                        generation_config=genai.GenerationConfig(
-                            response_mime_type="application/json",
-                            response_schema=ResumeData,
-                            temperature=0.0
-                        )
-                    )
-                )
-                logger.info("Native Gemini parsing successful")
-                data = json.loads(response.text)
-                return ResumeData(**data)
-            else:
-                logger.info("Invoking OpenAI (via Langchain) for resume parsing...")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        openai_is_valid = openai_key and openai_key.startswith("sk-") and len(openai_key) > 20
+
+        if openai_is_valid:
+            try:
+                logger.info("Invoking OpenAI (GPT-4o-Mini) for resume parsing...")
                 result = await self.structured_llm.ainvoke([
                     SystemMessage(content="You are a professional resume parser. Extract every detail into the structured format provided."),
                     HumanMessage(content=prompt)
                 ])
+                if isinstance(result, dict):
+                    return ResumeData(**result)
                 return result
-        except Exception as e:
-            logger.error(f"LLM Parsing failed: {e}. Using regex fallback.", exc_info=True)
+            except Exception as openai_err:
+                logger.error(f"OpenAI parsing failed: {openai_err}. Using regex fallback.")
+                return self._regex_fallback(raw_text)
+        else:
+            logger.info("No valid OpenAI API key found. Using regex fallback.")
             return self._regex_fallback(raw_text)
 
     def _regex_fallback(self, text: str) -> ResumeData:
@@ -173,22 +135,30 @@ class ResumeParserService:
         ]
         found_skills = [s.title() for s in skills_bank if s in text.lower()]
         
-        # Simple email/phone regex
-        email = re.search(r'[\w\.-]+@[\w\.-]+', text)
-        phone = re.search(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', text)
+        years_match = re.search(r'(\d+)\+?\s*years?', text.lower())
+        years = f"{years_match.group(1)} years" if years_match else "Not specified"
         
+        edu_level = "Not specified"
+        if any(w in text.lower() for w in ["phd", "ph.d"]):
+            edu_level = "PhD"
+        elif any(w in text.lower() for w in ["master", "m.s.", "ms", "mba"]):
+            edu_level = "Master's"
+        elif any(w in text.lower() for w in ["bachelor", "b.s.", "bs", "b.tech"]):
+            edu_level = "Bachelor's"
+            
         return ResumeData(
-            full_name="Extracted Candidate",
-            email=email.group(0) if email else None,
-            phone=phone.group(0) if phone else None,
             skills=found_skills,
-            experience=[],
-            education=[],
-            projects=[]
+            years_of_experience=years,
+            education_level=edu_level,
+            certifications=[],
+            past_job_titles=[]
         )
 
     def _get_empty_fallback(self) -> ResumeData:
         return ResumeData(
-            full_name=None, email=None, phone=None, 
-            skills=[], experience=[], education=[], projects=[]
+            skills=[],
+            years_of_experience="Not specified",
+            education_level="Not specified",
+            certifications=[],
+            past_job_titles=[]
         )

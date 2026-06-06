@@ -6,7 +6,6 @@ from services.resume_parser_v2 import ResumeParserService
 from services.resume_analyzer import ResumeAnalyzerService
 from dotenv import load_dotenv
 
-# Setup logging to see what's happening
 logging.basicConfig(level=logging.INFO)
 
 async def test_pipeline():
@@ -36,13 +35,11 @@ async def test_pipeline():
     """
     
     print("\n1. Testing Parser Fallback (Simulating Text)...")
-    # We use the internal regex fallback to verify logic if LLM is busy
     parsed_data = parser._regex_fallback(mock_text)
     print(f"Parsed Skills: {parsed_data.skills}")
     
     print("\n2. Testing Full Analyzer (LLM + Fallback)...")
-    # This will try OpenAI and then fallback if quota exceeded
-    analysis = await analyzer.analyze(parsed_data.dict())
+    analysis = await analyzer.analyze(parsed_data.model_dump())
     
     print("\n--- GENERATED JOB PREFERENCES ---")
     if analysis.suggested_roles:
@@ -61,8 +58,8 @@ async def test_pipeline():
     res = Resume(
         id=uuid.uuid4(),
         file_url="test.pdf",
-        parsed_content=parsed_data.dict(),
-        analysis_result=analysis.dict()
+        parsed_content=parsed_data.model_dump(),
+        analysis_result=analysis.model_dump()
     )
     print(f"Resume Model Object Created with ID: {res.id}")
     print(f"Analysis Result in Object: {res.analysis_result['suggested_roles'][0]['role']}...")

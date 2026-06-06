@@ -2,7 +2,6 @@ fastapi
 uvicorn
 langgraph
 langchain
-langchain-google-genai
 langchain-openai
 pydantic[email]
 sqlalchemy
@@ -22,5 +21,4 @@ pydub
 python-docx
 pytest
 pytest-mock
-google-generativeai
 audioop-lts; python_version >= "3.13"
