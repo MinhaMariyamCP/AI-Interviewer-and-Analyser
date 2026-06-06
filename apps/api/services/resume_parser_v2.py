@@ -106,7 +106,18 @@ class ResumeParserService:
             return self._get_empty_fallback()
 
         prompt = f"""
-        Extract structured information from the following resume text.
+        You are an expert resume parser. Extract every detail from the resume text and map it exhaustively to the structured schema.
+        Do not summarize or truncate descriptions. Be comprehensive and thorough.
+        
+        Fields to extract:
+        - full_name: The candidate's name.
+        - email: The candidate's email address.
+        - phone: The candidate's phone number.
+        - skills: A comprehensive list of technical skills, programming languages, libraries, frameworks, tools, soft skills, and certifications mentioned in the resume.
+        - experience: Every professional experience item, capturing the company name, role/title, duration, and detailed bullet points of responsibilities and achievements.
+        - education: Every academic institution, degree obtained (with major), and year of completion or duration.
+        - projects: Every personal or professional project, capturing its name, detailed description of the implementation, and the specific technologies used.
+
         Resume Text:
         {raw_text}
         """
