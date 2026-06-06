@@ -52,6 +52,8 @@ class ResumeAnalyzerService:
 
     async def analyze(self, resume_json: dict) -> ResumeAnalysis:
         """
+        Perform deep semantic analysis on resume data to generate job preferences.
+        """
         prompt = f"""
         You are an expert technical recruiter. Analyze the following structured resume data.
         Your goal is to:
