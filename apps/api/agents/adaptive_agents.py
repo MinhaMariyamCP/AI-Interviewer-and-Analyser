@@ -31,26 +31,45 @@ class AdaptiveAgents:
         self.openai_key = api_key or os.getenv("OPENAI_API_KEY")
         self.google_key = os.getenv("GOOGLE_API_KEY")
         
-        # Primary LLM
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            openai_api_key=self.openai_key,
-            temperature=0.7
-        )
+        # Check if keys are valid
+        openai_is_valid = self.openai_key and self.openai_key.startswith("sk-") and len(self.openai_key) > 20
+        google_is_valid = self.google_key and not self.google_key.startswith("AQ.") and len(self.google_key) > 10
         
-        # Fallback LLM (Gemini)
-        self.fallback_llm = None
-        if self.google_key:
-            self.fallback_llm = ChatGoogleGenerativeAI(
-                model="gemini-pro",
+        if google_is_valid and not openai_is_valid:
+            logger.info("Using Google Gemini as primary LLM for AdaptiveAgents")
+            self.llm = ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash",
                 google_api_key=self.google_key,
                 temperature=0.7
             )
-            
-        self.embeddings = OpenAIEmbeddings(openai_api_key=self.openai_key)
+            self.fallback_llm = None
+            try:
+                from langchain_google_genai import GoogleGenerativeAIEmbeddings
+                self.embeddings = GoogleGenerativeAIEmbeddings(
+                    model="models/embedding-001",
+                    google_api_key=self.google_key
+                )
+            except Exception as embed_err:
+                logger.error(f"Failed to load Google embeddings: {embed_err}")
+                self.embeddings = None
+        else:
+            logger.info("Using OpenAI as primary LLM for AdaptiveAgents")
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                openai_api_key=self.openai_key,
+                temperature=0.7
+            )
+            self.fallback_llm = None
+            if google_is_valid:
+                self.fallback_llm = ChatGoogleGenerativeAI(
+                    model="gemini-1.5-flash",
+                    google_api_key=self.google_key,
+                    temperature=0.7
+                )
+            self.embeddings = OpenAIEmbeddings(openai_api_key=self.openai_key)
 
     async def _safe_structured_output(self, prompt: str, schema, system_msg: str):
-        """Tries OpenAI first, then Gemini if 429 occurs."""
+        """Tries primary LLM first, falls back to alternative LLM if any error occurs."""
         try:
             structured_llm = self.llm.with_structured_output(schema)
             return await structured_llm.ainvoke([
@@ -58,13 +77,16 @@ class AdaptiveAgents:
                 HumanMessage(content=prompt)
             ])
         except Exception as e:
-            if "429" in str(e) and self.fallback_llm:
-                logger.warning(f"OpenAI Quota Exceeded. Falling back to Gemini. Error: {e}")
-                structured_fallback = self.fallback_llm.with_structured_output(schema)
-                return await structured_fallback.ainvoke([
-                    SystemMessage(content=system_msg),
-                    HumanMessage(content=prompt)
-                ])
+            if self.fallback_llm:
+                logger.warning(f"Primary LLM failed (Error: {e}). Falling back to Gemini...")
+                try:
+                    structured_fallback = self.fallback_llm.with_structured_output(schema)
+                    return await structured_fallback.ainvoke([
+                        SystemMessage(content=system_msg),
+                        HumanMessage(content=prompt)
+                    ])
+                except Exception as fallback_err:
+                    logger.error(f"Fallback LLM also failed: {fallback_err}")
             raise e
 
     # --- Agent 1: Resume Analyzer ---
