@@ -23,4 +23,4 @@ python-docx
 pytest
 pytest-mock
 google-generativeai
-audioop-lts
+audioop-lts; python_version >= "3.13"
