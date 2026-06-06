@@ -1,7 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from db.session import get_db
-from db.models import Resume
+from core.deps import get_current_user
+from db.models import Resume, User
 from services.resume_parser_v2 import ResumeParserService
 from services.resume_analyzer import ResumeAnalyzerService
 import uuid
@@ -13,7 +14,7 @@ parser_service = ResumeParserService()
 analyzer_service = ResumeAnalyzerService()
 
 @router.post("/upload")
-async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Upload, parse, and analyze a resume.
     """
@@ -39,6 +40,7 @@ async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_
         # 3. Save to Database
         new_resume = Resume(
             id=uuid.uuid4(),
+            user_id=current_user.id,
             file_url=filename, 
             parsed_content=structured_data.model_dump(),
             analysis_result=analysis_result.model_dump()
@@ -63,7 +65,7 @@ async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_
         await file.close()
 
 @router.post("/{resume_id}/reanalyze")
-async def reanalyze_resume(resume_id: str, db: Session = Depends(get_db)):
+async def reanalyze_resume(resume_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Re-run role analysis for an already uploaded resume.
     Useful after role-matching logic changes or when old analysis was too generic.
@@ -74,7 +76,7 @@ async def reanalyze_resume(resume_id: str, db: Session = Depends(get_db)):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid resume_id format")
 
-    resume = db.query(Resume).filter(Resume.id == resume_uuid).first()
+    resume = db.query(Resume).filter(Resume.id == resume_uuid, Resume.user_id == current_user.id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
@@ -90,14 +92,14 @@ async def reanalyze_resume(resume_id: str, db: Session = Depends(get_db)):
     }
 
 @router.get("/{resume_id}")
-async def get_resume_data(resume_id: str, db: Session = Depends(get_db)):
+async def get_resume_data(resume_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Fetches stored resume data and its AI analysis.
     """
     logger.info(f"--- GET /resumes/{resume_id} requested ---")
     try:
         resume_uuid = uuid.UUID(resume_id)
-        resume = db.query(Resume).filter(Resume.id == resume_uuid).first()
+        resume = db.query(Resume).filter(Resume.id == resume_uuid, Resume.user_id == current_user.id).first()
         if not resume:
             logger.warning(f"Resume {resume_id} not found in database.")
             raise HTTPException(status_code=404, detail="Resume not found")

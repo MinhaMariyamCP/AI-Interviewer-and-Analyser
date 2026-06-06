@@ -61,7 +61,7 @@ class ResumeAnalyzerService:
                 SystemMessage(content="You are a highly accurate AI career recruiter. Generate personalized job matches."),
                 HumanMessage(content=prompt)
             ])
-            return self._merge_with_evidence(resume_json, result)
+            return result
             
         except Exception as e:
             logger.error(f"LLM Analysis failed: {str(e)}. Using rule-based fallback.")

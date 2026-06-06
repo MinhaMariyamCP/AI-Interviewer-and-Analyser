@@ -1,58 +1,36 @@
 services:
   - type: web
-    runtime: docker
     name: ai-interview-api
-    region: singapore
-    plan: free
-    dockerfilePath: ./apps/api/Dockerfile
-    dockerContext: ./apps/api
-    healthCheckPath: /
+    env: python
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PORT
-        value: 10000
       - key: DATABASE_URL
         fromDatabase:
           name: ai-interview-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: ai-interview-redis
-          property: connectionString
-      - key: JWT_SECRET_KEY
-        generateValue: true
       - key: OPENAI_API_KEY
         sync: false
       - key: GOOGLE_API_KEY
         sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
 
   - type: web
-    runtime: docker
     name: ai-interview-web
-    region: singapore
-    plan: free
-    dockerfilePath: ./apps/web/Dockerfile
-    dockerContext: ./apps/web
-    healthCheckPath: /
+    env: node
+    rootDir: apps/web
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
-      - key: PORT
-        value: 10000
       - key: NEXT_PUBLIC_API_URL
-        value: https://ai-interview-api-tamc.onrender.com
+        sync: false # Set this to https://<your-api-url> in the Render dashboard
       - key: NEXT_PUBLIC_WS_URL
-        value: wss://ai-interview-api-tamc.onrender.com
-
-  - type: keyvalue
-    name: ai-interview-redis
-    region: singapore
-    plan: free
-    ipAllowList: []
-    maxmemoryPolicy: allkeys-lru
+        sync: false # Set this to wss://<your-api-url> in the Render dashboard
 
 databases:
   - name: ai-interview-db
-    region: singapore
-    plan: free
     databaseName: interview_db
     user: interview_user
-    ipAllowList: []
+    plan: free

@@ -59,6 +59,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data = await res.json();
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('role', data.role);
+      document.cookie = `token=${data.access_token}; path=/; max-age=604800; samesite=strict`;
       await refreshUser();
       router.push('/dashboard');
     } else {
@@ -77,6 +78,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data = await res.json();
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('role', data.role);
+      document.cookie = `token=${data.access_token}; path=/; max-age=604800; samesite=strict`;
       await refreshUser();
       router.push('/dashboard');
     } else {
@@ -87,6 +89,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
+    document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     setUser(null);
     router.push('/login');
   };

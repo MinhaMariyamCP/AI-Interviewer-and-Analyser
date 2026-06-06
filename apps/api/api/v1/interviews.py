@@ -3,7 +3,8 @@ import asyncio
 import time
 from sqlalchemy.orm import Session
 from db.session import get_db
-from db.models import Interview, Resume, InterviewData, InterviewAnalytics
+from db.models import Interview, Resume, InterviewData, InterviewAnalytics, User
+from core.deps import get_current_user, get_current_user_ws
 from agents.adaptive_orchestrator import adaptive_interview_graph
 from services.voice_service import VoiceService
 from services.interview_analytics import analyze_interview, analyze_interview_async, serialize_analytics, generate_analytics_pdf
@@ -159,18 +160,18 @@ def plan_fallback_question(state: dict) -> dict:
     }
 
 @router.get("/history", response_model=List[InterviewSchema])
-async def get_interview_history(db: Session = Depends(get_db)):
-    interviews = db.query(Interview).order_by(Interview.created_at.desc()).all()
+async def get_interview_history(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    interviews = db.query(Interview).filter(Interview.user_id == current_user.id).order_by(Interview.created_at.desc()).all()
     return interviews
 
 @router.post("/init")
-async def init_interview(resume_id: str, job_role: str = "Software Engineer", db: Session = Depends(get_db)):
+async def init_interview(resume_id: str, job_role: str = "Software Engineer", db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         resume_uuid = uuid.UUID(resume_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid resume_id format")
 
-    resume = db.query(Resume).filter(Resume.id == resume_uuid).first()
+    resume = db.query(Resume).filter(Resume.id == resume_uuid, Resume.user_id == current_user.id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
     
@@ -187,26 +188,26 @@ async def init_interview(resume_id: str, job_role: str = "Software Engineer", db
     
     return {"interview_id": str(interview.id), "status": "initialized"}
 
-def get_interview_or_404(interview_id: str, db: Session) -> Interview:
+def get_interview_or_404(interview_id: str, db: Session, current_user: User) -> Interview:
     try:
         interview_uuid = uuid.UUID(interview_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid interview_id format")
 
-    interview = db.query(Interview).filter(Interview.id == interview_uuid).first()
+    interview = db.query(Interview).filter(Interview.id == interview_uuid, Interview.user_id == current_user.id).first()
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
     return interview
 
 @router.post("/{interview_id}/analyze")
-async def analyze_interview_endpoint(interview_id: str, db: Session = Depends(get_db)):
-    get_interview_or_404(interview_id, db)
+async def analyze_interview_endpoint(interview_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    get_interview_or_404(interview_id, db, current_user)
     analytics = analyze_interview(interview_id, db)
     return serialize_analytics(analytics)
 
 @router.get("/{interview_id}/analytics")
-async def get_interview_analytics(interview_id: str, db: Session = Depends(get_db)):
-    interview = get_interview_or_404(interview_id, db)
+async def get_interview_analytics(interview_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    interview = get_interview_or_404(interview_id, db, current_user)
     analytics = db.query(InterviewAnalytics).filter(InterviewAnalytics.interview_id == interview.id).first()
     if not analytics:
         return {"status": "pending", "message": "Generating Interview Insights..."}
@@ -215,24 +216,24 @@ async def get_interview_analytics(interview_id: str, db: Session = Depends(get_d
     return serialize_analytics(analytics)
 
 @router.get("/{interview_id}/charts")
-async def get_interview_charts(interview_id: str, db: Session = Depends(get_db)):
-    interview = get_interview_or_404(interview_id, db)
+async def get_interview_charts(interview_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    interview = get_interview_or_404(interview_id, db, current_user)
     analytics = db.query(InterviewAnalytics).filter(InterviewAnalytics.interview_id == interview.id).first()
     if not analytics:
         return {"status": "pending", "charts": {}}
     return {"status": analytics.status, "charts": analytics.charts or {}}
 
 @router.get("/{interview_id}/improvements")
-async def get_interview_improvements(interview_id: str, db: Session = Depends(get_db)):
-    interview = get_interview_or_404(interview_id, db)
+async def get_interview_improvements(interview_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    interview = get_interview_or_404(interview_id, db, current_user)
     analytics = db.query(InterviewAnalytics).filter(InterviewAnalytics.interview_id == interview.id).first()
     if not analytics:
         return {"status": "pending", "improvement_roadmap": []}
     return {"status": analytics.status, "improvement_roadmap": analytics.improvement_roadmap or []}
 
 @router.get("/{interview_id}/report")
-async def download_interview_analytics_report(interview_id: str, db: Session = Depends(get_db)):
-    interview = get_interview_or_404(interview_id, db)
+async def download_interview_analytics_report(interview_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    interview = get_interview_or_404(interview_id, db, current_user)
     analytics = db.query(InterviewAnalytics).filter(InterviewAnalytics.interview_id == interview.id).first()
     if not analytics or not (analytics.charts or {}).get("career_recommendations"):
         analytics = analyze_interview(interview_id, db)
@@ -244,11 +245,18 @@ async def download_interview_analytics_report(interview_id: str, db: Session = D
     )
 
 @router.websocket("/{interview_id}/stream")
-async def interview_stream(websocket: WebSocket, interview_id: str, db: Session = Depends(get_db)):
+async def interview_stream(websocket: WebSocket, interview_id: str, token: str, db: Session = Depends(get_db)):
     start_handshake = time.time()
     await websocket.accept()
-    logger.info(f"--- WebSocket connected for interview {interview_id} (Handshake: {time.time() - start_handshake:.2f}s) ---")
+    logger.info(f"--- WebSocket connected for interview {interview_id} ---")
     
+    try:
+        current_user = get_current_user_ws(token, db)
+    except ValueError as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.close(code=4001, reason=str(e))
+        return
+
     try:
         interview_uuid = uuid.UUID(interview_id)
     except ValueError:
@@ -256,7 +264,7 @@ async def interview_stream(websocket: WebSocket, interview_id: str, db: Session 
         await websocket.close(code=4000)
         return
 
-    interview = db.query(Interview).filter(Interview.id == interview_uuid).first()
+    interview = db.query(Interview).filter(Interview.id == interview_uuid, Interview.user_id == current_user.id).first()
     if not interview:
         logger.error(f"Interview {interview_id} not found in DB")
         await websocket.send_json({"type": "error", "message": "Interview not found"})

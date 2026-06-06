@@ -77,7 +77,8 @@ function InterviewContent() {
     initializationRef.current = true;
 
     setStatusMessage('Establishing WebSocket connection...');
-    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/api/v1/interviews/${interviewId}/stream`;
+    const token = localStorage.getItem('token');
+    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/api/v1/interviews/${interviewId}/stream?token=${token}`;
     const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
 
