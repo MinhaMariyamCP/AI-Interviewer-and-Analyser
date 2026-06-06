@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 import os
 import fitz  # PyMuPDF
@@ -46,12 +47,23 @@ ResumeData.model_rebuild()
 
 class ResumeParserService:
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            openai_api_key=self.api_key,
-            temperature=0
-        )
+        google_key = os.getenv("GOOGLE_API_KEY")
+        openai_key = api_key or os.getenv("OPENAI_API_KEY")
+        
+        if google_key and google_key.startswith("AIzaSy"):
+            logger.info("Using Google Gemini for ResumeParserService")
+            self.llm = ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash",
+                google_api_key=google_key,
+                temperature=0
+            )
+        else:
+            logger.info("Using OpenAI GPT for ResumeParserService")
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                openai_api_key=openai_key,
+                temperature=0
+            )
         self.structured_llm = self.llm.with_structured_output(ResumeData)
 
     @staticmethod
@@ -100,7 +112,7 @@ class ResumeParserService:
         """
 
         try:
-            logger.info("Invoking OpenAI for resume parsing...")
+            logger.info("Invoking LLM for resume parsing...")
             result = await self.structured_llm.ainvoke([
                 SystemMessage(content="You are a professional resume parser. Extract every detail into the structured format provided."),
                 HumanMessage(content=prompt)

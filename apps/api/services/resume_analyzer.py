@@ -1,6 +1,7 @@
 from typing import List
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 import os
 import json
@@ -30,17 +31,26 @@ ResumeAnalysis.model_rebuild()
 
 class ResumeAnalyzerService:
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            openai_api_key=self.api_key,
-            temperature=0
-        )
+        google_key = os.getenv("GOOGLE_API_KEY")
+        openai_key = api_key or os.getenv("OPENAI_API_KEY")
+        
+        if google_key and google_key.startswith("AIzaSy"):
+            logger.info("Using Google Gemini for ResumeAnalyzerService")
+            self.llm = ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash",
+                google_api_key=google_key,
+                temperature=0
+            )
+        else:
+            logger.info("Using OpenAI GPT for ResumeAnalyzerService")
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                openai_api_key=openai_key,
+                temperature=0
+            )
         self.structured_llm = self.llm.with_structured_output(ResumeAnalysis)
 
     async def analyze(self, resume_json: dict) -> ResumeAnalysis:
-        """
-        Perform deep semantic analysis on resume data to generate job preferences.
         """
         prompt = f"""
         You are an expert technical recruiter. Analyze the following structured resume data.
