@@ -34,7 +34,7 @@ class ResumeAnalyzerService:
         google_key = os.getenv("GOOGLE_API_KEY")
         openai_key = api_key or os.getenv("OPENAI_API_KEY")
         
-        if google_key and google_key.startswith("AIzaSy"):
+        if google_key and not google_key.startswith("AQ."):
             logger.info("Using Google Gemini for ResumeAnalyzerService")
             self.llm = ChatGoogleGenerativeAI(
                 model="gemini-1.5-flash",
