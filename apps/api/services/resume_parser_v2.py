@@ -112,14 +112,41 @@ class ResumeParserService:
         """
 
         try:
-            logger.info("Invoking LLM for resume parsing...")
-            result = await self.structured_llm.ainvoke([
-                SystemMessage(content="You are a professional resume parser. Extract every detail into the structured format provided."),
-                HumanMessage(content=prompt)
-            ])
-            return result
+            google_key = os.getenv("GOOGLE_API_KEY")
+            if google_key and not google_key.startswith("AQ."):
+                logger.info("Invoking native Google Gemini for resume parsing...")
+                import google.generativeai as genai
+                genai.configure(api_key=google_key)
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                
+                import asyncio
+                from functools import partial
+                
+                loop = asyncio.get_running_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    partial(
+                        model.generate_content,
+                        prompt,
+                        generation_config=genai.GenerationConfig(
+                            response_mime_type="application/json",
+                            response_schema=ResumeData,
+                            temperature=0.0
+                        )
+                    )
+                )
+                logger.info("Native Gemini parsing successful")
+                data = json.loads(response.text)
+                return ResumeData(**data)
+            else:
+                logger.info("Invoking OpenAI (via Langchain) for resume parsing...")
+                result = await self.structured_llm.ainvoke([
+                    SystemMessage(content="You are a professional resume parser. Extract every detail into the structured format provided."),
+                    HumanMessage(content=prompt)
+                ])
+                return result
         except Exception as e:
-            logger.error(f"LLM Parsing failed: {e}. Using regex fallback.")
+            logger.error(f"LLM Parsing failed: {e}. Using regex fallback.", exc_info=True)
             return self._regex_fallback(raw_text)
 
     def _regex_fallback(self, text: str) -> ResumeData:

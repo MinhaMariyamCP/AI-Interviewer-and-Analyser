@@ -22,3 +22,4 @@ pydub
 python-docx
 pytest
 pytest-mock
+google-generativeai

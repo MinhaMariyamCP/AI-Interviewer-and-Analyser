@@ -68,15 +68,45 @@ class ResumeAnalyzerService:
         """
 
         try:
-            logger.info("Calling LLM for Resume Analysis")
-            result = await self.structured_llm.ainvoke([
-                SystemMessage(content="You are a highly accurate AI career recruiter. Generate personalized job matches."),
-                HumanMessage(content=prompt)
-            ])
-            return result
+            google_key = os.getenv("GOOGLE_API_KEY")
+            if google_key and not google_key.startswith("AQ."):
+                logger.info("Invoking native Google Gemini for Resume Analysis...")
+                import google.generativeai as genai
+                genai.configure(api_key=google_key)
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                
+                import asyncio
+                from functools import partial
+                
+                loop = asyncio.get_running_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    partial(
+                        model.generate_content,
+                        [
+                            "You are a highly accurate AI career recruiter. Generate personalized job matches.",
+                            prompt
+                        ],
+                        generation_config=genai.GenerationConfig(
+                            response_mime_type="application/json",
+                            response_schema=ResumeAnalysis,
+                            temperature=0.0
+                        )
+                    )
+                )
+                logger.info("Native Gemini analysis successful")
+                data = json.loads(response.text)
+                return ResumeAnalysis(**data)
+            else:
+                logger.info("Calling OpenAI (via Langchain) for Resume Analysis")
+                result = await self.structured_llm.ainvoke([
+                    SystemMessage(content="You are a highly accurate AI career recruiter. Generate personalized job matches."),
+                    HumanMessage(content=prompt)
+                ])
+                return result
             
         except Exception as e:
-            logger.error(f"LLM Analysis failed: {str(e)}. Using rule-based fallback.")
+            logger.error(f"LLM Analysis failed: {str(e)}. Using rule-based fallback.", exc_info=True)
             return self._rule_based_analysis(resume_json)
 
     def _resume_text(self, resume_json: dict) -> str:
