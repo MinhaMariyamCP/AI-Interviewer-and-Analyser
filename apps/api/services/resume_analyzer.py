@@ -55,9 +55,11 @@ class ResumeAnalyzerService:
         Perform deep semantic analysis on resume data to generate job preferences.
         """
         prompt = f"""
-        You are an expert technical recruiter. Analyze the following structured resume data.
+        You are an expert technical recruiter. Given a candidate's resume, which includes their skills, experience, education, and certifications, classify the top job roles most aligned with their profile. 
+        Ensure distinct differentiation by capturing key role-specific skills, tools, and responsibilities. Avoid overly broad classifications—focus on precise job titles.
+        
         Your goal is to:
-        1. Recommend 6 to 10 specific job roles that this candidate is qualified for.
+        1. Recommend 6 to 10 specific job roles that this candidate is qualified for, with the top, most-aligned role ranked first.
         2. Every recommendation MUST be supported by explicit evidence from the resume: skills, projects, experience, education, or domain terms.
         3. Do NOT add generic software roles unless the resume clearly contains software engineering evidence.
         4. If the resume is non-technical, recommend domain-appropriate interview roles instead of forcing tech roles.
