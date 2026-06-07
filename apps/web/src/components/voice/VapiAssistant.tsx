@@ -16,9 +16,12 @@ interface VapiAssistantProps {
   className?: string;
   targetRole?: string;
   compact?: boolean;
+  onTranscript?: (entry: { role: 'assistant' | 'user'; content: string }) => void;
+  onCallStart?: () => void;
+  onCallEnd?: () => void;
 }
 
-export function VapiAssistant({ className, targetRole, compact = false }: VapiAssistantProps) {
+export function VapiAssistant({ className, targetRole, compact = false, onTranscript, onCallStart, onCallEnd }: VapiAssistantProps) {
   const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
   const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID;
   const vapiRef = useRef<Vapi | null>(null);
@@ -43,11 +46,13 @@ export function VapiAssistant({ className, targetRole, compact = false }: VapiAs
       setIsCalling(true);
       setStatus('Live call active');
       setError(null);
+      onCallStart?.();
     });
 
     vapi.on('call-end', () => {
       setIsCalling(false);
       setStatus('Call ended');
+      onCallEnd?.();
     });
 
     vapi.on('speech-start', () => {
@@ -59,9 +64,11 @@ export function VapiAssistant({ className, targetRole, compact = false }: VapiAs
     });
 
     vapi.on('message', (message: VapiMessage) => {
-      if (message.type === 'transcript' && message.transcript) {
-        const speaker = message.role === 'assistant' ? 'Assistant' : 'You';
+      if (message.type === 'transcript' && message.transcript && message.transcriptType !== 'partial') {
+        const role = message.role === 'assistant' ? 'assistant' : 'user';
+        const speaker = role === 'assistant' ? 'Assistant' : 'You';
         setLastTranscript(`${speaker}: ${message.transcript}`);
+        onTranscript?.({ role, content: message.transcript });
       }
     });
 
@@ -82,7 +89,7 @@ export function VapiAssistant({ className, targetRole, compact = false }: VapiAs
       }
       vapiRef.current = null;
     };
-  }, [isConfigured, publicKey]);
+  }, [isConfigured, publicKey, onCallStart, onCallEnd, onTranscript]);
 
   const startCall = async () => {
     if (!vapiRef.current || !assistantId) return;

@@ -76,3 +76,14 @@ class InterviewAnalytics(Base):
     executive_summary = Column(String)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class VoiceInterviewProfile(Base):
+    __tablename__ = "voice_interview_profiles"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    status = Column(String, default="completed")
+    candidate_profile = Column(JSON)
+    recommended_roles = Column(JSON)
+    transcript = Column(JSON)
+    overall_score = Column(Float)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

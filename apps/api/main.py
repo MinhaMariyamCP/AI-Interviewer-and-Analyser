@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from api.v1 import auth, resumes, interviews, analytics, reports, users
+from api.v1 import auth, resumes, interviews, analytics, reports, users, voice_interviews
 from db.session import engine
 from db.models import Base
 
@@ -57,6 +57,7 @@ app.include_router(resumes.router)
 app.include_router(interviews.router)
 app.include_router(analytics.router)
 app.include_router(reports.router)
+app.include_router(voice_interviews.router)
 
 @app.get("/")
 async def root():

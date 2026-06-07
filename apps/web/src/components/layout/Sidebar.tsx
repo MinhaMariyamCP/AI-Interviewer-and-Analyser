@@ -61,11 +61,11 @@ export const Sidebar = () => {
 
       <div className="p-4 space-y-4">
         <Link 
-          href="/upload"
+          href="/voice-interview"
           className="flex items-center justify-center space-x-2 w-full py-3 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 transition-all shadow-md hover:shadow-lg active:scale-95"
         >
           <PlusCircle size={18} />
-          <span>New Interview</span>
+          <span>Voice Interview</span>
         </Link>
 
         <div className="pt-4 border-t border-slate-100">
