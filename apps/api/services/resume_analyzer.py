@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -15,16 +15,124 @@ class JobPreference(BaseModel):
     role: Optional[str] = Field(default="", description="Recommended job title (e.g., Senior AI Engineer)")
     confidence: Optional[float] = Field(default=0.0, description="Confidence score from 0-100")
     reasoning: Optional[str] = Field(default="", description="Brief explanation of why this role matches the resume")
+    supporting_skills: List[str] = Field(default_factory=list, description="Resume skills that support this recommendation")
+    missing_skills: List[str] = Field(default_factory=list, description="Skills to add to become more competitive")
+    domain: Optional[str] = Field(default="", description="Career domain for deduplication and grouping")
+
+class CandidateSkillProfile(BaseModel):
+    skills: List[str] = Field(default_factory=list)
+    technologies: List[str] = Field(default_factory=list)
+    certifications: List[str] = Field(default_factory=list)
+    coursework: List[str] = Field(default_factory=list)
+    projects: List[str] = Field(default_factory=list)
+    experience_years: Optional[str] = "Not specified"
+    education: Optional[str] = "Not specified"
+    past_job_titles: List[str] = Field(default_factory=list)
 
 class ResumeAnalysis(BaseModel):
     skills: List[str] = Field(default_factory=list, description="Core hard skills and soft skills extracted from the resume")
     technologies: List[str] = Field(default_factory=list, description="Specific tools, frameworks, and programming languages")
     experience_level: Optional[str] = Field(default="Mid-level", description="Calculated seniority: Junior, Mid-level, Senior, or Lead")
     strengths: List[str] = Field(default_factory=list, description="Top 3-5 unique value propositions")
-    suggested_roles: List[JobPreference] = Field(default_factory=list, description="At least 10 personalized job role recommendations")
+    candidate_profile: CandidateSkillProfile = Field(default_factory=CandidateSkillProfile)
+    recommended_roles: List[JobPreference] = Field(default_factory=list, description="Top 3 strongest role recommendations")
+    suggested_roles: List[JobPreference] = Field(default_factory=list, description="5 to 8 personalized, distinct internship role recommendations")
 
 # Rebuild models for Pydantic v2 compatibility
 ResumeAnalysis.model_rebuild()
+
+ROLE_TAXONOMY = [
+    {
+        "role": "Frontend Developer Intern",
+        "domain": "frontend",
+        "core": ["react", "next.js", "javascript", "typescript", "html", "css"],
+        "supporting": ["tailwind", "responsive design", "ui", "accessibility", "frontend"],
+        "missing": ["Accessibility", "State Management", "Testing"],
+        "titles": ["frontend", "web developer", "ui developer"],
+        "project_terms": ["portfolio", "dashboard", "web app", "landing page", "frontend"],
+    },
+    {
+        "role": "Backend Developer Intern",
+        "domain": "backend",
+        "core": ["python", "java", "node.js", "fastapi", "django", "express", "api", "postgresql", "mongodb", "sql"],
+        "supporting": ["authentication", "database", "rest", "server", "microservices"],
+        "missing": ["API Testing", "Database Indexing", "Caching"],
+        "titles": ["backend", "software developer", "api developer"],
+        "project_terms": ["api", "server", "database", "backend"],
+    },
+    {
+        "role": "Full Stack Developer Intern",
+        "domain": "fullstack",
+        "core": ["react", "javascript", "typescript", "node.js", "python", "api", "mongodb", "postgresql", "docker"],
+        "supporting": ["frontend", "backend", "full stack", "authentication", "deployment"],
+        "missing": ["System Design Basics", "End-to-End Testing", "Cloud Deployment"],
+        "titles": ["full stack", "software developer", "web developer"],
+        "project_terms": ["full stack", "web app", "dashboard", "mern", "crud"],
+    },
+    {
+        "role": "AI/ML Intern",
+        "domain": "ai_ml",
+        "core": ["python", "machine learning", "tensorflow", "pytorch", "scikit-learn", "llm", "gemini", "openai", "nlp"],
+        "supporting": ["sentiment analysis", "model", "classification", "prediction", "ai", "data preprocessing"],
+        "missing": ["TensorFlow or PyTorch", "Model Deployment", "MLOps Basics"],
+        "titles": ["machine learning", "ai", "ml engineer", "data science"],
+        "project_terms": ["sentiment analysis", "chatbot", "recommendation", "ai interviewer", "llm", "model"],
+    },
+    {
+        "role": "Data Science Intern",
+        "domain": "data_science",
+        "core": ["python", "pandas", "numpy", "machine learning", "statistics", "scikit-learn"],
+        "supporting": ["eda", "visualization", "prediction", "regression", "classification"],
+        "missing": ["Statistics", "Feature Engineering", "Model Evaluation"],
+        "titles": ["data scientist", "data science"],
+        "project_terms": ["prediction", "classification", "eda", "dataset", "model"],
+    },
+    {
+        "role": "Data Analytics Intern",
+        "domain": "data_analytics",
+        "core": ["sql", "excel", "power bi", "tableau", "dashboard", "analytics", "reporting"],
+        "supporting": ["kpi", "metrics", "data analysis", "visualization", "business insights"],
+        "missing": ["Advanced SQL", "Dashboard Storytelling", "Business Metrics"],
+        "titles": ["data analyst", "business analyst", "analytics"],
+        "project_terms": ["dashboard", "report", "metrics", "sales analysis", "kpi"],
+    },
+    {
+        "role": "DevOps Intern",
+        "domain": "devops",
+        "core": ["docker", "kubernetes", "ci/cd", "jenkins", "github actions", "linux"],
+        "supporting": ["deployment", "container", "monitoring", "automation", "pipeline"],
+        "missing": ["CI/CD Pipelines", "Linux Administration", "Monitoring"],
+        "titles": ["devops", "platform engineer"],
+        "project_terms": ["docker deployment", "pipeline", "containerized", "deployment"],
+    },
+    {
+        "role": "Cloud Engineering Intern",
+        "domain": "cloud",
+        "core": ["aws", "azure", "gcp", "cloud", "ec2", "s3", "lambda", "docker"],
+        "supporting": ["deployment", "serverless", "infrastructure", "scalability"],
+        "missing": ["AWS IAM", "Networking Basics", "Infrastructure as Code"],
+        "titles": ["cloud", "cloud engineer"],
+        "project_terms": ["cloud deployment", "aws", "azure", "hosted"],
+    },
+    {
+        "role": "Cybersecurity Intern",
+        "domain": "cybersecurity",
+        "core": ["cybersecurity", "security", "network security", "linux", "vulnerability", "owasp"],
+        "supporting": ["authentication", "encryption", "penetration testing", "firewall"],
+        "missing": ["OWASP Top 10", "Networking", "Security Tools"],
+        "titles": ["security analyst", "cybersecurity"],
+        "project_terms": ["secure", "authentication", "encryption", "vulnerability"],
+    },
+    {
+        "role": "Mobile Developer Intern",
+        "domain": "mobile",
+        "core": ["flutter", "react native", "android", "kotlin", "swift", "dart", "mobile"],
+        "supporting": ["firebase", "app", "ios", "android studio"],
+        "missing": ["App Store Deployment", "Mobile UI Patterns", "Offline Storage"],
+        "titles": ["mobile developer", "android developer", "ios developer"],
+        "project_terms": ["mobile app", "android app", "flutter app"],
+    },
+]
 
 # --- Service Implementation ---
 
@@ -54,6 +162,8 @@ class ResumeAnalyzerService:
         """
         Perform deep semantic analysis on resume data to generate job preferences.
         """
+        return self._weighted_role_analysis(resume_json)
+
         prompt = f"""
         You are an expert technical recruiter. Given a candidate's resume, which includes their skills, experience, education, and certifications, classify the top job roles most aligned with their profile. 
         Ensure distinct differentiation by capturing key role-specific skills, tools, and responsibilities. Avoid overly broad classifications—focus on precise job titles.
@@ -89,11 +199,238 @@ class ResumeAnalyzerService:
 
     def _resume_text(self, resume_json: dict) -> str:
         parts = []
-        for key in ("skills", "certifications", "past_job_titles"):
+        for key in ("skills", "technologies", "certifications", "past_job_titles", "coursework", "courses"):
             parts.extend(str(item) for item in resume_json.get(key) or [])
         parts.append(str(resume_json.get("education_level") or ""))
+        parts.append(str(resume_json.get("education") or ""))
         parts.append(str(resume_json.get("years_of_experience") or ""))
+        for item in resume_json.get("projects") or []:
+            if isinstance(item, dict):
+                parts.extend([
+                    str(item.get("name") or ""),
+                    str(item.get("description") or ""),
+                    " ".join(str(t) for t in item.get("technologies") or []),
+                ])
+            else:
+                parts.append(str(item))
+        for item in resume_json.get("experience") or []:
+            if isinstance(item, dict):
+                parts.extend([
+                    str(item.get("role") or ""),
+                    str(item.get("company") or ""),
+                    " ".join(str(d) for d in item.get("description") or []),
+                ])
+            else:
+                parts.append(str(item))
         return " ".join(parts).lower()
+
+    def _as_list(self, value) -> List[str]:
+        if isinstance(value, list):
+            items = value
+        elif value:
+            items = [value]
+        else:
+            items = []
+        return [str(item).strip() for item in items if str(item).strip()]
+
+    def _candidate_profile(self, resume_json: dict) -> CandidateSkillProfile:
+        projects = []
+        for item in resume_json.get("projects") or []:
+            if isinstance(item, dict):
+                text = " ".join([
+                    str(item.get("name") or ""),
+                    str(item.get("description") or ""),
+                    " ".join(str(t) for t in item.get("technologies") or []),
+                ]).strip()
+                if text:
+                    projects.append(text)
+            elif str(item).strip():
+                projects.append(str(item).strip())
+
+        return CandidateSkillProfile(
+            skills=self._as_list(resume_json.get("skills")),
+            technologies=self._as_list(resume_json.get("technologies")),
+            certifications=self._as_list(resume_json.get("certifications")),
+            coursework=self._as_list(resume_json.get("coursework") or resume_json.get("courses")),
+            projects=projects,
+            experience_years=str(resume_json.get("years_of_experience") or "Not specified"),
+            education=str(resume_json.get("education_level") or resume_json.get("education") or "Not specified"),
+            past_job_titles=self._as_list(resume_json.get("past_job_titles")),
+        )
+
+    def _keyword_hits(self, text: str, keywords: List[str]) -> List[str]:
+        hits = []
+        for keyword in keywords:
+            pattern = r"(?<![a-z0-9])" + re.escape(keyword.lower()) + r"(?![a-z0-9])"
+            if re.search(pattern, text):
+                hits.append(keyword)
+        return hits
+
+    def _weighted_role_analysis(self, resume_json: dict) -> ResumeAnalysis:
+        profile = self._candidate_profile(resume_json)
+        text = self._resume_text(resume_json)
+        title_text = " ".join(profile.past_job_titles).lower()
+        cert_text = " ".join(profile.certifications).lower()
+        course_text = " ".join(profile.coursework + [profile.education or ""]).lower()
+        project_text = " ".join(profile.projects).lower()
+
+        scored_roles = []
+        for spec in ROLE_TAXONOMY:
+            core_hits = self._keyword_hits(text, spec["core"])
+            supporting_hits = self._keyword_hits(text, spec["supporting"])
+            title_hits = self._keyword_hits(title_text, spec["titles"])
+            cert_hits = self._keyword_hits(cert_text, spec["core"] + spec["supporting"])
+            course_hits = self._keyword_hits(course_text, spec["core"] + spec["supporting"])
+            project_hits = self._keyword_hits(project_text, spec["project_terms"] + spec["core"] + spec["supporting"])
+
+            score = (
+                len(core_hits) * 12
+                + len(supporting_hits) * 6
+                + len(project_hits) * 10
+                + len(title_hits) * 9
+                + len(cert_hits) * 7
+                + len(course_hits) * 5
+            )
+
+            if spec["domain"] == "fullstack":
+                has_frontend = bool(self._keyword_hits(text, ["react", "frontend", "html", "css", "javascript", "typescript"]))
+                has_backend = bool(self._keyword_hits(text, ["node.js", "python", "api", "database", "mongodb", "postgresql", "fastapi"]))
+                if not (has_frontend and has_backend):
+                    score -= 22
+
+            if spec["domain"] == "devops" and self._keyword_hits(text, ["docker"]):
+                score += 8
+            if spec["domain"] == "cloud" and self._keyword_hits(text, ["aws", "azure", "gcp"]):
+                score += 12
+
+            evidence = []
+            for hit in core_hits + supporting_hits + project_hits + title_hits + cert_hits + course_hits:
+                label = hit.title()
+                if label not in evidence:
+                    evidence.append(label)
+
+            if score > 0 and evidence:
+                missing = [
+                    skill for skill in spec["missing"]
+                    if skill.lower() not in {item.lower() for item in evidence}
+                ][:3]
+                confidence = max(48, min(95, round(42 + score * 1.15 - len(scored_roles) * 0.3)))
+                scored_roles.append({
+                    "role": spec["role"],
+                    "domain": spec["domain"],
+                    "score": score,
+                    "confidence": confidence,
+                    "evidence": evidence[:6],
+                    "missing": missing,
+                    "reason": self._role_reason(spec["role"], evidence[:4], project_hits, title_hits, cert_hits, course_hits),
+                })
+
+        scored_roles.sort(key=lambda item: (item["score"], item["confidence"]), reverse=True)
+        selected = self._select_distinct_roles(scored_roles)
+
+        if len(selected) < 5:
+            selected = self._fill_related_roles(selected, scored_roles)
+
+        if not selected:
+            selected = [{
+                "role": "General Software Intern",
+                "domain": "general",
+                "confidence": 45,
+                "evidence": profile.skills[:3] or ["Resume uploaded"],
+                "missing": ["More project details", "Role-specific technical skills"],
+                "reason": "The resume did not provide enough role-specific evidence for a confident technical internship match.",
+            }]
+
+        roles = [
+            JobPreference(
+                role=item["role"],
+                confidence=self._unique_confidence(item["confidence"], index),
+                reasoning=item["reason"],
+                supporting_skills=item["evidence"],
+                missing_skills=item["missing"],
+                domain=item["domain"],
+            )
+            for index, item in enumerate(selected[:8])
+        ]
+
+        all_skills = self._dedupe(profile.skills + profile.technologies)
+        return ResumeAnalysis(
+            skills=all_skills,
+            technologies=profile.technologies or all_skills,
+            experience_level=self._experience_level(profile.experience_years),
+            strengths=self._dedupe([skill for role in roles for skill in role.supporting_skills])[:5],
+            candidate_profile=profile,
+            recommended_roles=roles[:3],
+            suggested_roles=roles,
+        )
+
+    def _role_reason(self, role: str, evidence: List[str], project_hits: List[str], title_hits: List[str], cert_hits: List[str], course_hits: List[str]) -> str:
+        signals = []
+        if evidence:
+            signals.append(", ".join(evidence))
+        if project_hits:
+            signals.append("project evidence")
+        if title_hits:
+            signals.append("past role/title evidence")
+        if cert_hits:
+            signals.append("certification evidence")
+        if course_hits:
+            signals.append("coursework/education evidence")
+        return f"{role} fits because the resume shows {', '.join(signals[:4])}."
+
+    def _select_distinct_roles(self, scored_roles: List[Dict]) -> List[Dict]:
+        selected = []
+        used_domains: Set[str] = set()
+
+        for role in scored_roles:
+            domain = role["domain"]
+            if domain in used_domains:
+                continue
+            selected.append(role)
+            used_domains.add(domain)
+            if len(selected) >= 8:
+                break
+        return selected
+
+    def _fill_related_roles(self, selected: List[Dict], scored_roles: List[Dict]) -> List[Dict]:
+        existing = {item["role"] for item in selected}
+        used_domains = {item["domain"] for item in selected}
+
+        for role in scored_roles:
+            domain = role["domain"]
+            if role["role"] not in existing and domain not in used_domains:
+                selected.append(role)
+                existing.add(role["role"])
+                used_domains.add(domain)
+            if len(selected) >= 5:
+                break
+        return selected
+
+    def _unique_confidence(self, confidence: float, index: int) -> float:
+        return max(35, min(96, round(float(confidence) - (index * 1.7), 1)))
+
+    def _dedupe(self, items: List[str]) -> List[str]:
+        seen = set()
+        result = []
+        for item in items:
+            key = str(item).strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                result.append(str(item).strip())
+        return result
+
+    def _experience_level(self, value: Optional[str]) -> str:
+        match = re.search(r"\d+", str(value or ""))
+        if not match:
+            return "Internship / Entry-level"
+        years = int(match.group(0))
+        if years < 1:
+            return "Internship / Entry-level"
+        if years < 3:
+            return "Junior"
+        if years < 6:
+            return "Mid-level"
+        return "Senior"
 
     def _add_role(self, roles: dict, role: str, confidence: float, reasoning: str) -> None:
         key = role.lower()

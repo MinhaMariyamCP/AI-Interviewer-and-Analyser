@@ -22,6 +22,9 @@ interface JobPreference {
   confidence: number;
   reasoning: string;
   source?: 'resume' | 'practice';
+  supporting_skills?: string[];
+  missing_skills?: string[];
+  domain?: string;
 }
 
 const mergeRoles = (roles: JobPreference[] = []) => {
@@ -187,6 +190,27 @@ export default function RoleSelectionPage() {
                 <p className="text-[10px] font-black text-primary-600 uppercase tracking-[0.2em] mb-3">Recommended Career Path</p>
                 <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-3">{primaryRole.role}</h2>
                 <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-2xl">{primaryRole.reasoning}</p>
+                {!!primaryRole.supporting_skills?.length && (
+                  <div className="flex flex-wrap gap-2 mt-5">
+                    {primaryRole.supporting_skills.slice(0, 6).map((skill) => (
+                      <span key={skill} className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-wider">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {!!primaryRole.missing_skills?.length && (
+                  <div className="mt-5">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Missing Skills To Improve Fit</p>
+                    <div className="flex flex-wrap gap-2">
+                      {primaryRole.missing_skills.slice(0, 4).map((skill) => (
+                        <span key={skill} className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-wider">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="shrink-0 text-left md:text-right">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Resume Match</p>
@@ -235,6 +259,32 @@ export default function RoleSelectionPage() {
               <p className="text-xs text-slate-500 font-medium leading-relaxed flex-1">
                 {item.reasoning}
               </p>
+
+              {!!item.supporting_skills?.length && (
+                <div className="mt-5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Resume Strengths</p>
+                  <div className="flex flex-wrap gap-2">
+                    {item.supporting_skills.slice(0, 4).map((skill) => (
+                      <span key={skill} className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-wider">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!!item.missing_skills?.length && (
+                <div className="mt-4">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Missing Skills</p>
+                  <div className="flex flex-wrap gap-2">
+                    {item.missing_skills.slice(0, 3).map((skill) => (
+                      <span key={skill} className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-wider">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {selectedRole === item.role && (
                 <div className="absolute -top-3 -right-3 w-10 h-10 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary-200 animate-in zoom-in duration-300">
