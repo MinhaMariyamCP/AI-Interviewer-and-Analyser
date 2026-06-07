@@ -30,6 +30,10 @@ services:
         sync: false # Set this to https://<your-api-url> in the Render dashboard
       - key: NEXT_PUBLIC_WS_URL
         sync: false # Set this to wss://<your-api-url> in the Render dashboard
+      - key: NEXT_PUBLIC_VAPI_PUBLIC_KEY
+        sync: false # Set this to your Vapi public browser key
+      - key: NEXT_PUBLIC_VAPI_ASSISTANT_ID
+        sync: false # Set this to your Vapi assistant ID
 
 databases:
   - name: ai-interview-db

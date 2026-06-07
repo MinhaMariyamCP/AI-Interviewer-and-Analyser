@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
+import { VapiAssistant } from '@/components/voice/VapiAssistant';
 import { cn } from '@/lib/utils';
 
 interface Message {
@@ -43,6 +44,7 @@ function InterviewContent() {
   const [statusMessage, setStatusMessage] = useState('Connecting to interview stream...');
   const [error, setError] = useState<string | null>(null);
   const [processingStage, setProcessingStage] = useState<string | null>(null);
+  const [targetRole, setTargetRole] = useState('Software Engineer');
   
   // Real-Time Dashboard State
   const [liveScores, setLiveScores] = useState<any>(null);
@@ -75,6 +77,7 @@ function InterviewContent() {
   useEffect(() => {
     if (!interviewId || initializationRef.current) return;
     initializationRef.current = true;
+    setTargetRole(localStorage.getItem('selected_role') || 'Software Engineer');
 
     setStatusMessage('Establishing WebSocket connection...');
     const token = localStorage.getItem('token');
@@ -331,10 +334,12 @@ function InterviewContent() {
                 <span className="text-[10px] font-black uppercase tracking-widest">Target Role</span>
               </div>
               <div className="text-lg font-bold text-primary-900 leading-tight">
-                {localStorage.getItem('selected_role') || 'Software Engineer'}
+                {targetRole}
               </div>
             </div>
           </div>
+
+          <VapiAssistant targetRole={targetRole} />
         </div>
 
         <div className="mt-auto">
