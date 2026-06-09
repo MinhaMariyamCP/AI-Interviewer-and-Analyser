@@ -1,7 +1,8 @@
 services:
   - type: web
     name: ai-interview-api
-    env: python
+    runtime: python
+    plan: free
     rootDir: apps/api
     pythonVersion: 3.11.9
     buildCommand: python -m pip install --upgrade pip && pip install -r requirements.txt
@@ -20,7 +21,8 @@ services:
 
   - type: web
     name: ai-interview-web
-    env: node
+    runtime: node
+    plan: free
     rootDir: apps/web
     buildCommand: npm install --legacy-peer-deps && npm run build
     startCommand: npm start
