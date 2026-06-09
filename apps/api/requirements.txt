@@ -21,4 +21,6 @@ pydub
 python-docx
 pytest
 pytest-mock
+pytest-asyncio
+gunicorn
 audioop-lts; python_version >= "3.13"

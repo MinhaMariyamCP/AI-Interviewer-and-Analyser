@@ -1,14 +1,18 @@
 import os
 import io
-import asyncio
 import time
-from typing import Optional
-from faster_whisper import WhisperModel
-from openai import AsyncOpenAI
 import logging
-from pydub import AudioSegment
 
 logger = logging.getLogger(__name__)
+
+try:
+    from faster_whisper import WhisperModel
+except Exception as exc:
+    WhisperModel = None
+    logger.warning("faster-whisper is unavailable; local STT fallback will be disabled: %s", exc)
+
+from openai import AsyncOpenAI
+
 
 class VoiceService:
     def __init__(self, api_key: str = None):
@@ -23,6 +27,8 @@ class VoiceService:
     @property
     def stt_model(self):
         if self._stt_model is None:
+            if WhisperModel is None:
+                raise RuntimeError("Local STT fallback is unavailable because faster-whisper could not be imported.")
             logger.info(f"Loading Whisper model: {self.model_size}")
             self._stt_model = WhisperModel(self.model_size, device="cpu", compute_type="int8")
         return self._stt_model
