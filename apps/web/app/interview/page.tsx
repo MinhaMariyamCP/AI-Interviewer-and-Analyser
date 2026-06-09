@@ -49,6 +49,36 @@ function InterviewContent() {
   // Real-Time Dashboard State
   const [liveScores, setLiveScores] = useState<any>(null);
   const [coveredTopics, setCoveredTopics] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('interview-session-state');
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      setMessages(parsed.messages || []);
+      setCurrentQuestion(parsed.currentQuestion || '');
+      setLiveScores(parsed.liveScores || null);
+      setCoveredTopics(parsed.coveredTopics || []);
+      setElapsedTime(parsed.elapsedTime || 0);
+      setReport(parsed.report || null);
+      setIsCompleted(Boolean(parsed.isCompleted));
+    } catch (err) {
+      console.warn('Could not restore interview session', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    sessionStorage.setItem('interview-session-state', JSON.stringify({
+      messages,
+      currentQuestion,
+      liveScores,
+      coveredTopics,
+      elapsedTime,
+      report,
+      isCompleted,
+    }));
+  }, [messages, currentQuestion, liveScores, coveredTopics, elapsedTime, report, isCompleted]);
   
   // Voice State
   const [isRecording, setIsRecording] = useState(false);

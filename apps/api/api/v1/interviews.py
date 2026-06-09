@@ -70,6 +70,22 @@ def build_final_report(state: dict) -> dict:
         "question_history": [item.get("question") for item in history]
     }
 
+def build_transcript_snapshot(state: dict) -> list:
+    transcript = []
+    for item in state.get("answer_history", []) or []:
+        question = item.get("question") or ""
+        answer = item.get("answer") or ""
+        if question:
+            transcript.append({"role": "interviewer", "content": question})
+        if answer:
+            transcript.append({"role": "candidate", "content": answer})
+
+    if state.get("current_question") and not any(entry.get("content") == state.get("current_question") for entry in transcript[-2:] if entry.get("role") == "interviewer"):
+        transcript.append({"role": "interviewer", "content": state.get("current_question")})
+
+    return transcript
+
+
 def build_fallback_eval(question: str = "", answer: str = "", profile: dict = None, role: str = "") -> dict:
     profile = profile or {}
     answer_text = (answer or "").strip()
@@ -468,6 +484,13 @@ async def interview_stream(websocket: WebSocket, interview_id: str, token: str, 
                     except Exception as db_err:
                         logger.error(f"Failed to save turn data: {db_err}")
 
+                    state["full_transcript"] = build_transcript_snapshot(state)
+                    interview.transcript = state.get("full_transcript")
+                    interview.status = "completed" if state.get("is_completed") else "in_progress"
+                    if state.get("final_report"):
+                        interview.overall_score = state["final_report"].get("overall_score")
+                    db.commit()
+
                     if state.get("is_completed"):
                         await websocket.send_json({
                             "type": "final_report", 
@@ -506,12 +529,13 @@ async def interview_stream(websocket: WebSocket, interview_id: str, token: str, 
         except:
             pass
     finally:
+        state["full_transcript"] = build_transcript_snapshot(state)
+        interview.transcript = state.get("full_transcript")
+        interview.status = "completed" if state.get("is_completed") else "paused"
+        if state.get("final_report"):
+            interview.overall_score = state["final_report"].get("overall_score")
+        db.commit()
         if state.get("is_completed"):
-            interview.status = "completed"
-            interview.transcript = state.get("full_transcript")
-            if state.get("final_report"):
-                interview.overall_score = state["final_report"].get("overall_score")
-            db.commit()
             asyncio.create_task(analyze_interview_async(str(interview.id)))
         
         try:

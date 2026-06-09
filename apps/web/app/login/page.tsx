@@ -81,7 +81,7 @@ function LoginContent() {
             <div className="space-y-2">
               <div className="flex items-center justify-between ml-1">
                 <label htmlFor="password" className="text-sm font-bold text-slate-700 dark:text-slate-200">Password</label>
-                <button type="button" className="text-xs font-bold text-primary-600 hover:text-primary-700 dark:text-primary-300">Forgot?</button>
+                <Link href="/forgot-password" className="text-xs font-bold text-primary-600 hover:text-primary-700 dark:text-primary-300">Forgot?</Link>
               </div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-500 transition-colors">

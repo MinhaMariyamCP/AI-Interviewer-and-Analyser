@@ -70,6 +70,8 @@ export default function DashboardPage() {
     };
 
     fetchInterviews();
+    const interval = setInterval(fetchInterviews, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const latestVoiceProfile = voiceProfiles[0];

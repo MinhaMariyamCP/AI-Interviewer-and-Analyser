@@ -28,6 +28,8 @@ export default function AnalyticsDashboard() {
       }
     };
     fetchAnalytics();
+    const interval = setInterval(fetchAnalytics, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   if (isLoading) {

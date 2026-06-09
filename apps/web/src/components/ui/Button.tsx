@@ -13,12 +13,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', isLoading, disabled, children, ...props }, ref) => {
     
     const variants = {
-      primary: "bg-primary-600 text-white hover:bg-primary-700 shadow-sm shadow-primary-200",
-      secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200",
-      outline: "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900",
-      ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-      danger: "bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-100",
-      success: "bg-green-50 text-green-700 hover:bg-green-600 hover:text-white border border-green-100",
+      primary: "bg-primary-600 text-white hover:bg-primary-700 shadow-sm shadow-primary-200 dark:bg-primary-500 dark:hover:bg-primary-400",
+      secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700",
+      outline: "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 dark:hover:text-white",
+      ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white",
+      danger: "bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-100 dark:bg-red-950/70 dark:text-red-200 dark:border-red-800 dark:hover:bg-red-600",
+      success: "bg-green-50 text-green-700 hover:bg-green-600 hover:text-white border border-green-100 dark:bg-green-950/70 dark:text-green-200 dark:border-green-800 dark:hover:bg-green-600",
     };
 
     const sizes = {
