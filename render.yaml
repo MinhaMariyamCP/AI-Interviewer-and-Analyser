@@ -4,7 +4,6 @@ services:
     runtime: python
     plan: free
     rootDir: apps/api
-    pythonVersion: 3.11.9
     buildCommand: python -m pip install --upgrade pip && pip install -r requirements.txt
     startCommand: python -m uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -12,6 +11,8 @@ services:
         fromDatabase:
           name: ai-interview-db
           property: connectionString
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: OPENAI_API_KEY
         sync: false
       - key: GOOGLE_API_KEY
