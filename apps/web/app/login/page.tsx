@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
-import { Bot, Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { Bot, Mail, Lock, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 export default function LoginPage() {
@@ -11,7 +12,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const searchParams = useSearchParams();
   const { login } = useAuth();
+  const signupSuccess = searchParams.get('signup') === 'success';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,14 +54,20 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
+            {signupSuccess && (
+              <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm font-medium rounded-xl text-center">
+                Account created successfully. Please sign in with your email and password.
+              </div>
+            )}
             
             <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 ml-1 dark:text-slate-200">Email Address</label>
+              <label htmlFor="email" className="text-sm font-bold text-slate-700 ml-1 dark:text-slate-200">Email Address</label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-500 transition-colors">
                   <Mail size={18} />
                 </div>
                 <input
+                  id="email"
                   type="email"
                   required
                   className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-2xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400 dark:bg-slate-950 dark:border-slate-700 dark:text-white"
@@ -71,14 +80,15 @@ export default function LoginPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between ml-1">
-                <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Password</label>
-                <a href="#" className="text-xs font-bold text-primary-600 hover:text-primary-700 dark:text-primary-300">Forgot?</a>
+                <label htmlFor="password" className="text-sm font-bold text-slate-700 dark:text-slate-200">Password</label>
+                <button type="button" className="text-xs font-bold text-primary-600 hover:text-primary-700 dark:text-primary-300">Forgot?</button>
               </div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-500 transition-colors">
                   <Lock size={18} />
                 </div>
                 <input
+                  id="password"
                   type="password"
                   required
                   className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-2xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400 dark:bg-slate-950 dark:border-slate-700 dark:text-white"
