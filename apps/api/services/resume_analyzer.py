@@ -41,99 +41,6 @@ class ResumeAnalysis(BaseModel):
 # Rebuild models for Pydantic v2 compatibility
 ResumeAnalysis.model_rebuild()
 
-ROLE_TAXONOMY = [
-    {
-        "role": "Frontend Developer Intern",
-        "domain": "frontend",
-        "core": ["react", "next.js", "javascript", "typescript", "html", "css"],
-        "supporting": ["tailwind", "responsive design", "ui", "accessibility", "frontend"],
-        "missing": ["Accessibility", "State Management", "Testing"],
-        "titles": ["frontend", "web developer", "ui developer"],
-        "project_terms": ["portfolio", "dashboard", "web app", "landing page", "frontend"],
-    },
-    {
-        "role": "Backend Developer Intern",
-        "domain": "backend",
-        "core": ["python", "java", "node.js", "fastapi", "django", "express", "api", "postgresql", "mongodb", "sql"],
-        "supporting": ["authentication", "database", "rest", "server", "microservices"],
-        "missing": ["API Testing", "Database Indexing", "Caching"],
-        "titles": ["backend", "software developer", "api developer"],
-        "project_terms": ["api", "server", "database", "backend"],
-    },
-    {
-        "role": "Full Stack Developer Intern",
-        "domain": "fullstack",
-        "core": ["react", "javascript", "typescript", "node.js", "python", "api", "mongodb", "postgresql", "docker"],
-        "supporting": ["frontend", "backend", "full stack", "authentication", "deployment"],
-        "missing": ["System Design Basics", "End-to-End Testing", "Cloud Deployment"],
-        "titles": ["full stack", "software developer", "web developer"],
-        "project_terms": ["full stack", "web app", "dashboard", "mern", "crud"],
-    },
-    {
-        "role": "AI/ML Intern",
-        "domain": "ai_ml",
-        "core": ["python", "machine learning", "tensorflow", "pytorch", "scikit-learn", "llm", "gemini", "openai", "nlp"],
-        "supporting": ["sentiment analysis", "model", "classification", "prediction", "ai", "data preprocessing"],
-        "missing": ["TensorFlow or PyTorch", "Model Deployment", "MLOps Basics"],
-        "titles": ["machine learning", "ai", "ml engineer", "data science"],
-        "project_terms": ["sentiment analysis", "chatbot", "recommendation", "ai interviewer", "llm", "model"],
-    },
-    {
-        "role": "Data Science Intern",
-        "domain": "data_science",
-        "core": ["python", "pandas", "numpy", "machine learning", "statistics", "scikit-learn"],
-        "supporting": ["eda", "visualization", "prediction", "regression", "classification"],
-        "missing": ["Statistics", "Feature Engineering", "Model Evaluation"],
-        "titles": ["data scientist", "data science"],
-        "project_terms": ["prediction", "classification", "eda", "dataset", "model"],
-    },
-    {
-        "role": "Data Analytics Intern",
-        "domain": "data_analytics",
-        "core": ["sql", "excel", "power bi", "tableau", "dashboard", "analytics", "reporting"],
-        "supporting": ["kpi", "metrics", "data analysis", "visualization", "business insights"],
-        "missing": ["Advanced SQL", "Dashboard Storytelling", "Business Metrics"],
-        "titles": ["data analyst", "business analyst", "analytics"],
-        "project_terms": ["dashboard", "report", "metrics", "sales analysis", "kpi"],
-    },
-    {
-        "role": "DevOps Intern",
-        "domain": "devops",
-        "core": ["docker", "kubernetes", "ci/cd", "jenkins", "github actions", "linux"],
-        "supporting": ["deployment", "container", "monitoring", "automation", "pipeline"],
-        "missing": ["CI/CD Pipelines", "Linux Administration", "Monitoring"],
-        "titles": ["devops", "platform engineer"],
-        "project_terms": ["docker deployment", "pipeline", "containerized", "deployment"],
-    },
-    {
-        "role": "Cloud Engineering Intern",
-        "domain": "cloud",
-        "core": ["aws", "azure", "gcp", "cloud", "ec2", "s3", "lambda", "docker"],
-        "supporting": ["deployment", "serverless", "infrastructure", "scalability"],
-        "missing": ["AWS IAM", "Networking Basics", "Infrastructure as Code"],
-        "titles": ["cloud", "cloud engineer"],
-        "project_terms": ["cloud deployment", "aws", "azure", "hosted"],
-    },
-    {
-        "role": "Cybersecurity Intern",
-        "domain": "cybersecurity",
-        "core": ["cybersecurity", "security", "network security", "linux", "vulnerability", "owasp"],
-        "supporting": ["authentication", "encryption", "penetration testing", "firewall"],
-        "missing": ["OWASP Top 10", "Networking", "Security Tools"],
-        "titles": ["security analyst", "cybersecurity"],
-        "project_terms": ["secure", "authentication", "encryption", "vulnerability"],
-    },
-    {
-        "role": "Mobile Developer Intern",
-        "domain": "mobile",
-        "core": ["flutter", "react native", "android", "kotlin", "swift", "dart", "mobile"],
-        "supporting": ["firebase", "app", "ios", "android studio"],
-        "missing": ["App Store Deployment", "Mobile UI Patterns", "Offline Storage"],
-        "titles": ["mobile developer", "android developer", "ios developer"],
-        "project_terms": ["mobile app", "android app", "flutter app"],
-    },
-]
-
 # --- Service Implementation ---
 
 class ResumeAnalyzerService:
@@ -266,94 +173,150 @@ class ResumeAnalyzerService:
                 hits.append(keyword)
         return hits
 
-    def _weighted_role_analysis(self, resume_json: dict) -> ResumeAnalysis:
+    def _project_depth_score(self, resume_json: dict) -> int:
+        projects = resume_json.get("projects") or []
+        experience = resume_json.get("experience") or []
+        text = self._resume_text(resume_json)
+        project_count = len(projects)
+        exp_count = len(experience)
+        tech_density = len(self._keyword_hits(text, ["python", "react", "fastapi", "docker", "aws", "tensorflow", "pytorch", "sql", "api", "model", "deployment"]))
+        return min(18, project_count * 3 + exp_count * 2 + tech_density)
+
+    def _dynamic_role_candidates(self, resume_json: dict) -> List[Dict]:
         profile = self._candidate_profile(resume_json)
         text = self._resume_text(resume_json)
-        title_text = " ".join(profile.past_job_titles).lower()
-        cert_text = " ".join(profile.certifications).lower()
-        course_text = " ".join(profile.coursework + [profile.education or ""]).lower()
         project_text = " ".join(profile.projects).lower()
+        tech_terms = self._dedupe(profile.skills + profile.technologies)
 
-        scored_roles = []
-        for spec in ROLE_TAXONOMY:
-            core_hits = self._keyword_hits(text, spec["core"])
-            supporting_hits = self._keyword_hits(text, spec["supporting"])
-            title_hits = self._keyword_hits(title_text, spec["titles"])
-            cert_hits = self._keyword_hits(cert_text, spec["core"] + spec["supporting"])
-            course_hits = self._keyword_hits(course_text, spec["core"] + spec["supporting"])
-            project_hits = self._keyword_hits(project_text, spec["project_terms"] + spec["core"] + spec["supporting"])
+        ai_terms = self._keyword_hits(text, ["machine learning", "ml", "tensorflow", "pytorch", "llm", "nlp", "ai", "model", "deep learning", "classification", "prediction", "chatbot"])
+        frontend_terms = self._keyword_hits(text, ["react", "next.js", "typescript", "javascript", "html", "css", "frontend", "ui", "tailwind"])
+        backend_terms = self._keyword_hits(text, ["python", "fastapi", "django", "flask", "node.js", "express", "api", "database", "postgres", "mongodb", "sql", "server"])
+        analytics_terms = self._keyword_hits(text, ["analytics", "dashboard", "power bi", "tableau", "excel", "sql", "report", "kpi", "metrics"])
+        devops_terms = self._keyword_hits(text, ["docker", "kubernetes", "aws", "azure", "gcp", "ci/cd", "terraform", "devops", "deployment", "cloud"])
+        security_terms = self._keyword_hits(text, ["security", "owasp", "vulnerability", "authentication", "encryption", "penetration", "cyber"])
 
-            score = (
-                len(core_hits) * 12
-                + len(supporting_hits) * 6
-                + len(project_hits) * 10
-                + len(title_hits) * 9
-                + len(cert_hits) * 7
-                + len(course_hits) * 5
+        project_depth = self._project_depth_score(resume_json)
+
+        candidates = []
+
+        def add_candidate(role: str, domain: str, evidence: List[str], missing: List[str], reason: str, base_score: int):
+            score = base_score + project_depth + (len(evidence) * 3) + (1 if "engineer" in role.lower() else 0)
+            if not evidence:
+                return
+            if role.lower() in {item["role"].lower() for item in candidates}:
+                return
+            confidence = max(35, min(96, round(45 + score * 1.1 - (len(candidates) * 1.6))))
+            if len(evidence) < 2:
+                confidence -= 7
+            if "project" not in " ".join(evidence).lower():
+                confidence -= 3
+            if (domain in {"ai_ml", "fullstack"} and project_depth < 6) or (domain == "analytics" and len(analytics_terms) < 2):
+                confidence -= 4
+            candidates.append({
+                "role": role,
+                "domain": domain,
+                "score": score,
+                "confidence": max(35, confidence),
+                "evidence": self._dedupe(evidence)[:6],
+                "missing": missing[:3],
+                "reason": reason,
+            })
+
+        if ai_terms:
+            add_candidate(
+                "Machine Learning Engineer",
+                "ai_ml",
+                self._dedupe(ai_terms + [item for item in tech_terms if item.lower() in {"python", "tensorflow", "pytorch", "scikit-learn", "langchain", "openai", "gemini"}] + self._keyword_hits(project_text, ["model", "deployment", "chatbot", "classification", "prediction"]))[:8],
+                ["MLOps", "Model Deployment", "Deep Learning Optimization"],
+                f"The resume shows applied AI/ML work through {', '.join(ai_terms[:4])} and project evidence that matches machine-learning delivery.",
+                26,
+            )
+        if frontend_terms and backend_terms:
+            add_candidate(
+                "Full-Stack Engineer",
+                "fullstack",
+                self._dedupe(frontend_terms + backend_terms + self._keyword_hits(project_text, ["api", "frontend", "backend", "web app", "dashboard"]))[:8],
+                ["System Design", "End-to-End Testing", "Cloud Deployment"],
+                "The profile combines front-end implementation and backend/API work, which is a strong signal for full-stack delivery.",
+                24,
+            )
+        if frontend_terms:
+            add_candidate(
+                "Frontend Engineer",
+                "frontend",
+                self._dedupe(frontend_terms + self._keyword_hits(project_text, ["ui", "dashboard", "web app", "frontend"]))[:8],
+                ["Accessibility", "Design Systems", "Testing"],
+                "UI and web-interface evidence is strong across the resume and project descriptions.",
+                18,
+            )
+        if backend_terms:
+            add_candidate(
+                "Backend Engineer",
+                "backend",
+                self._dedupe(backend_terms + self._keyword_hits(project_text, ["api", "server", "database", "auth"]))[:8],
+                ["API Scaling", "Database Optimization", "Security Hardening"],
+                "The resume demonstrates backend implementation, APIs, data handling, and service-layer development.",
+                20,
+            )
+        if analytics_terms:
+            add_candidate(
+                "Data Analyst",
+                "analytics",
+                self._dedupe(analytics_terms + self._keyword_hits(project_text, ["dashboard", "metrics", "report", "analysis"]))[:8],
+                ["Advanced SQL", "Statistical Modeling", "Stakeholder Storytelling"],
+                "Analytics, dashboards, and reporting evidence align with data-focused roles.",
+                18,
+            )
+        if devops_terms:
+            add_candidate(
+                "DevOps / Cloud Engineer",
+                "devops",
+                self._dedupe(devops_terms + self._keyword_hits(project_text, ["deployment", "pipeline", "container", "cloud"]))[:8],
+                ["CI/CD Automation", "Infrastructure as Code", "Monitoring"],
+                "Deployment, cloud tooling, and containerization are clearly present in the profile.",
+                18,
+            )
+        if security_terms:
+            add_candidate(
+                "Security Engineer",
+                "security",
+                self._dedupe(security_terms + self._keyword_hits(project_text, ["auth", "secure", "encryption", "vulnerability"]))[:8],
+                ["Threat Modeling", "Secure Coding", "OWASP Review"],
+                "Security-focused skills and implementation evidence suggest a security-oriented profile.",
+                16,
             )
 
-            if spec["domain"] == "fullstack":
-                has_frontend = bool(self._keyword_hits(text, ["react", "frontend", "html", "css", "javascript", "typescript"]))
-                has_backend = bool(self._keyword_hits(text, ["node.js", "python", "api", "database", "mongodb", "postgresql", "fastapi"]))
-                if not (has_frontend and has_backend):
-                    score -= 22
-
-            if spec["domain"] == "devops" and self._keyword_hits(text, ["docker"]):
-                score += 8
-            if spec["domain"] == "cloud" and self._keyword_hits(text, ["aws", "azure", "gcp"]):
-                score += 12
-
-            evidence = []
-            for hit in core_hits + supporting_hits + project_hits + title_hits + cert_hits + course_hits:
-                label = hit.title()
-                if label not in evidence:
-                    evidence.append(label)
-
-            if score > 0 and evidence:
-                missing = [
-                    skill for skill in spec["missing"]
-                    if skill.lower() not in {item.lower() for item in evidence}
-                ][:3]
-                confidence = max(48, min(95, round(42 + score * 1.15 - len(scored_roles) * 0.3)))
-                scored_roles.append({
-                    "role": spec["role"],
-                    "domain": spec["domain"],
-                    "score": score,
-                    "confidence": confidence,
-                    "evidence": evidence[:6],
-                    "missing": missing,
-                    "reason": self._role_reason(spec["role"], evidence[:4], project_hits, title_hits, cert_hits, course_hits),
-                })
-
-        scored_roles.sort(key=lambda item: (item["score"], item["confidence"]), reverse=True)
-        selected = self._select_distinct_roles(scored_roles)
-
-        if len(selected) < 5:
-            selected = self._fill_related_roles(selected, scored_roles)
-
-        if not selected:
-            selected = [{
-                "role": "General Software Intern",
-                "domain": "general",
+        if not candidates:
+            candidates.append({
+                "role": "Software Engineer",
+                "domain": "software",
+                "score": 14 + project_depth,
                 "confidence": 45,
-                "evidence": profile.skills[:3] or ["Resume uploaded"],
-                "missing": ["More project details", "Role-specific technical skills"],
-                "reason": "The resume did not provide enough role-specific evidence for a confident technical internship match.",
-            }]
+                "evidence": tech_terms[:4] or ["Resume uploaded"],
+                "missing": ["Role-specific project detail", "Targeted tool evidence"],
+                "reason": "The resume contains general software-development evidence, so a broad engineering role is the safest fit.",
+            })
 
-        roles = [
-            JobPreference(
+        candidates.sort(key=lambda item: (item["score"], item["confidence"]), reverse=True)
+        return candidates[:8]
+
+    def _weighted_role_analysis(self, resume_json: dict) -> ResumeAnalysis:
+        profile = self._candidate_profile(resume_json)
+        candidates = self._dynamic_role_candidates(resume_json)
+        all_skills = self._dedupe(profile.skills + profile.technologies)
+
+        roles = []
+        for index, item in enumerate(candidates):
+            role = JobPreference(
                 role=item["role"],
                 confidence=self._unique_confidence(item["confidence"], index),
-                reasoning=item["reason"],
+                reasoning=item["reason"] + f" Confidence is based on applied project depth, domain relevance, and experience level ({self._experience_level(profile.experience_years)}).",
                 supporting_skills=item["evidence"],
                 missing_skills=item["missing"],
                 domain=item["domain"],
             )
-            for index, item in enumerate(selected[:8])
-        ]
+            roles.append(role)
 
-        all_skills = self._dedupe(profile.skills + profile.technologies)
         return ResumeAnalysis(
             skills=all_skills,
             technologies=profile.technologies or all_skills,
